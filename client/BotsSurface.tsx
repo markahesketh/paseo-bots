@@ -791,13 +791,12 @@ function SelectedChat({ colors, bot, library, selection, localHost, panelOpen, l
   }, [bot.name, host.api]);
 
   // "Set up with the bot" opens a new chat that sends its first message straight away.
-  const autoStarted = useRef(false);
+  const autoStartedSelection = useRef<Selection | null>(null);
   useEffect(() => {
-    if (selection.chatId !== null || !selection.prompt || autoStarted.current || !host.api) return;
-    autoStarted.current = true;
+    if (selection.chatId !== null || !selection.prompt || autoStartedSelection.current === selection || !host.api) return;
+    autoStartedSelection.current = selection;
     start({ text: selection.prompt, messageId: newMessageId(), images: [], attachments: [] }).catch((error: unknown) => toast.error(`Couldn't start: ${errorText(error)}`));
-    // Runs once for the selection that carries the prompt.
-  }, [host.api]);
+  }, [host.api, selection]);
 
   return (
     <ChatPane
