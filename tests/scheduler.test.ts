@@ -59,6 +59,7 @@ describe("the routine scheduler", () => {
   it("records runs, posts cards to the results chat, and finishes them when the chat's turn ends", async () => {
     const { Relay } = await import("../server/relay");
     const { RoutineScheduler } = await import("../server/scheduler");
+    const { Asks } = await import("../server/asks");
     const hook = routine({ id: "rt-hook", name: "Orders", schedule: { kind: "webhook" }, resultsChatId: "results-chat" });
     // Created now, so the first tick has no missed run to record.
     const host = fakeHost([makeBot({ id: "bot-r", routines: [routine({ createdAt: new Date().toISOString() }), hook] })]);
@@ -72,7 +73,7 @@ describe("the routine scheduler", () => {
         }),
       },
     } as never);
-    const relay = new Relay(host, []);
+    const relay = new Relay(host, [], new Asks(host));
     const scheduler = new RoutineScheduler(host, relay);
     scheduler.stop();
     let started = 0;

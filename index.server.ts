@@ -1,6 +1,7 @@
 import type { PluginHandlerContext, PluginServerContext } from "@getpaseo/plugin/server";
 import { ensureBotHome, ensureBotsHome, migrateRenamedPluginData } from "./server/bot-home";
 import { turnEnded, turnStarted } from "./server/activity";
+import { Asks } from "./server/asks";
 import { CommandAllowlist } from "./server/commands";
 import { MemoryJournal } from "./server/journal";
 import { deleteLogDay, listLogDays, listMemory, readLogDay, readMemory } from "./server/memory";
@@ -84,7 +85,8 @@ export default function contribute(server: PluginServerContext) {
   };
   const host = new BotsHost(settings);
   // Bots' tools and connected apps go through this relay; it reads the saved settings on every call.
-  const relay = new Relay(host, BOT_TOOLS);
+  const asks = new Asks(host);
+  const relay = new Relay(host, BOT_TOOLS, asks);
   void relay.start().catch((error: unknown) => console.error("paseo-bots: couldn't start the relay", error));
   const scheduler = new RoutineScheduler(host, relay);
   const journal = new MemoryJournal();
@@ -165,7 +167,7 @@ export default function contribute(server: PluginServerContext) {
   server.handle(uploadRpc, saveUpload);
   server.on("agent.turn_started", async (event, context) => {
     host.attach(context.paseo);
-    await turnStarted(host, journal, event).catch((error: unknown) => console.error("paseo-bots: couldn't check memory before a turn", error));
+    await turnStarted(host, journal, asks, event).catch((error: unknown) => console.error("paseo-bots: couldn't check memory before a turn", error));
   });
   // A bot's saved commands (exact command, exact folder) are approved here instead of asking.
   server.on("agent.permission_requested", async ({ agent, request }, context) => {
@@ -181,7 +183,7 @@ export default function contribute(server: PluginServerContext) {
   });
   server.on("agent.turn_ended", async (event, context) => {
     host.attach(context.paseo);
-    await turnEnded(host, journal, scheduler, event).catch((error: unknown) => console.error("paseo-bots: couldn't record a turn", error));
+    await turnEnded(host, journal, scheduler, asks, event).catch((error: unknown) => console.error("paseo-bots: couldn't record a turn", error));
   });
 
   return () => {
