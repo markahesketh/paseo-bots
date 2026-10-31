@@ -1,8 +1,10 @@
+import { lastTurn } from "../shared/activity";
 import type { Bot } from "../shared/bot";
 import { startBotChat } from "../shared/chat";
 import { newUuid } from "../shared/uuid";
 import { ensureBotHome } from "./bot-home";
 import type { BotsHost } from "./host";
+import type { PaseoApi } from "./paseo";
 import { systemPrompt } from "./prompt";
 import type { Relay } from "./relay";
 
@@ -29,4 +31,10 @@ export async function startChat(host: BotsHost, relay: Relay, bot: Bot, input: {
     title: input.title,
     labels: input.labels,
   });
+}
+
+/** A chat's latest turn, read from its timeline: the bot's last reply and the tools it used. */
+export async function readLastTurn(paseo: PaseoApi, agentId: string): Promise<{ reply: string; tools: string[] }> {
+  const page = await paseo.agents.ref(agentId).timeline.refetch({ direction: "tail", projection: "projected", limit: 80 });
+  return lastTurn(page.entries.map((entry) => entry.item as { type: string; text?: unknown; name?: unknown }));
 }

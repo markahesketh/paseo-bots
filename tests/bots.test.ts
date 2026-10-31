@@ -3,7 +3,8 @@ import { buildAgentConfig, EMPTY_LIBRARY } from "../shared/bot";
 import { fakeHost, makeBot } from "./helpers";
 
 const started: { botId: string; prompt: string; title: string; labels: Record<string, string> }[] = [];
-vi.mock("../server/chats", () => ({
+vi.mock("../server/chats", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../server/chats")>()),
   startChat: vi.fn(async (_host: unknown, _relay: unknown, bot: { id: string }, input: { prompt: string; title: string; labels: Record<string, string> }) => {
     started.push({ botId: bot.id, ...input });
     return "chat-new";

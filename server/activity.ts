@@ -1,5 +1,6 @@
 import type { PluginLifecycleEvents } from "@getpaseo/plugin/server";
 import { lastTurn, logLine } from "../shared/activity";
+import { readLastTurn } from "./chats";
 import type { BotsHost } from "./host";
 import type { MemoryJournal } from "./journal";
 import { appendDailyLog } from "./memory";
@@ -19,7 +20,8 @@ export async function turnEnded(host: BotsHost, journal: MemoryJournal, schedule
   const { botId } = chat;
   const title = chat.title?.trim() || agent.title?.trim() || "Untitled chat";
   await journal.end(botId, { id: agent.id, title });
-  const { reply, tools } = lastTurn(timeline);
+  // Paseo sends turn_ended with an empty timeline, so the turn is read from the chat.
+  const { reply, tools } = await readLastTurn(host.requirePaseo(), agent.id).catch(() => lastTurn(timeline));
   if (chat.routineId) await scheduler.finished(chat.routineId, agent.id, outcome, reply);
   if (outcome.kind === "canceled") return;
   const line = logLine({ at: new Date(), chat: title, reply, tools, failure: outcome.kind === "failed" ? outcome.error.message : null });
