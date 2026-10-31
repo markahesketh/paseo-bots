@@ -1,5 +1,5 @@
 import { lastTurn } from "../shared/activity";
-import { ASK_PATH_LABEL, parseAskPath } from "../shared/asks";
+import { ASK_PATH_LABEL, parseAskPath, type ChatRef } from "../shared/asks";
 import type { Bot } from "../shared/bot";
 import { startBotChat } from "../shared/chat";
 import { newUuid } from "../shared/uuid";
@@ -14,12 +14,12 @@ import type { Relay } from "./relay";
  * prompt, its folder, and the plugin's tools and connected apps. Routines and
  * requests from other bots start chats with it.
  */
-export async function startChat(host: BotsHost, relay: Relay, bot: Bot, input: { prompt: string; title: string; labels: Record<string, string>; agentId?: string }): Promise<string> {
+export async function startChat(host: BotsHost, relay: Relay, bot: Bot, input: { prompt: string; title: string; labels: Record<string, string>; agentId?: string; otherChats?: readonly ChatRef[] }): Promise<string> {
   const paseo = host.requirePaseo();
   if (bot.hostId) throw new Error(`${bot.name} runs on another host, so its chats can't be started from here.`);
   const library = await host.library();
   const home = await ensureBotHome({ botId: bot.id });
-  const { systemPrompt: system } = await systemPrompt({ bot, local: true, message: input.prompt, askPath: parseAskPath(input.labels[ASK_PATH_LABEL]) }, library, paseo, await host.values());
+  const { systemPrompt: system } = await systemPrompt({ bot, local: true, message: input.prompt, askPath: parseAskPath(input.labels[ASK_PATH_LABEL]), otherChats: input.otherChats }, library, paseo, await host.values());
   const agentId = input.agentId ?? newUuid();
   return startBotChat(paseo, {
     bot,

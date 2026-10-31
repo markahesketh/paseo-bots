@@ -5,10 +5,10 @@ import { ASK_PATH_LABEL } from "../shared/asks";
 import { buildAgentConfig, EMPTY_LIBRARY } from "../shared/bot";
 import { fakeHost, fakePaseo, makeBot, type FakeChat } from "./helpers";
 
-const started: { botId: string; agentId?: string; prompt: string; title: string; labels: Record<string, string> }[] = [];
+const started: { botId: string; agentId?: string; prompt: string; title: string; labels: Record<string, string>; otherChats?: readonly { id: string; title: string }[] }[] = [];
 vi.mock("../server/chats", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../server/chats")>()),
-  startChat: vi.fn(async (_host: unknown, _relay: unknown, bot: { id: string }, input: { agentId?: string; prompt: string; title: string; labels: Record<string, string> }) => {
+  startChat: vi.fn(async (_host: unknown, _relay: unknown, bot: { id: string }, input: { agentId?: string; prompt: string; title: string; labels: Record<string, string>; otherChats?: readonly { id: string; title: string }[] }) => {
     started.push({ botId: bot.id, ...input });
     return input.agentId ?? "chat-new";
   }),
@@ -21,7 +21,13 @@ describe("asking other bots", () => {
     const { askBot, askPrompt } = await import("../server/tools/bots");
     const scout = makeBot({ id: "bot-scout", name: "Scout" });
     const host = fakeHost([scout, makeBot({ id: "bot-inbox", name: "Inbox" }), makeBot({ id: "bot-old", name: "Old", archived: true })]);
-    const chats: Record<string, FakeChat> = { "caller-chat": { status: "running", labels: { "paseo-bots.bot": "bot-scout" } } };
+    const chats: Record<string, FakeChat> = {
+      "caller-chat": { status: "running", labels: { "paseo-bots.bot": "bot-scout" } },
+      // Inbox's chats at work now, which its new chat hears about, newest first; a finished one isn't mentioned.
+      "inbox-old": { status: "running", title: "Archive", labels: { "paseo-bots.bot": "bot-inbox" }, updatedAt: "2026-09-27T01:00:00.000Z" },
+      "inbox-new": { status: "initializing", labels: { "paseo-bots.bot": "bot-inbox" }, updatedAt: "2026-09-27T02:00:00.000Z" },
+      "inbox-done": { status: "idle", title: "Done", labels: { "paseo-bots.bot": "bot-inbox" } },
+    };
     host.attach(fakePaseo(chats));
     const caller = { bot: scout, agentId: "caller-chat", host, relay: null as never, asks: new Asks(host) };
 
@@ -36,6 +42,10 @@ describe("asking other bots", () => {
     expect(chatId).toMatch(UUID);
     expect(answer).toBe(`Asked Inbox in chat ${chatId}. Its reply will arrive here as a message, so there's no need to wait.`);
     expect(started.at(-1)).toMatchObject({ botId: "bot-inbox", title: "Scout: How many unread mails?", labels: { [ASK_PATH_LABEL]: "bot-scout@caller-chat" } });
+    expect(started.at(-1)!.otherChats).toEqual([
+      { id: "inbox-new", title: "Untitled chat" },
+      { id: "inbox-old", title: "Archive" },
+    ]);
     chats[chatId] = { status: "running", labels: { "paseo-bots.bot": "bot-inbox", [ASK_PATH_LABEL]: "bot-scout@caller-chat" } };
     await expect(askBot.run({ bot: "Old", message: "x" }, caller)).rejects.toThrow('There\'s no other bot called "Old". Ask one of: Inbox.');
 
@@ -101,8 +111,13 @@ describe("asking other bots", () => {
   it("tells an asked chat its place in the chain, by name", async () => {
     const scout = makeBot({ id: "bot-scout", name: "Scout" });
     const inbox = makeBot({ id: "bot-inbox", name: "Inbox" });
-    const { sections } = await systemPrompt({ bot: inbox, local: false, askPath: [{ botId: "bot-scout", chatId: "x" }] }, EMPTY_LIBRARY, null, { bots: [scout, inbox], history: [], library: EMPTY_LIBRARY });
+    const { sections } = await systemPrompt({ bot: inbox, local: false, askPath: [{ botId: "bot-scout", chatId: "x" }], otherChats: [{ id: "c9", title: "Archive" }] }, EMPTY_LIBRARY, null, { bots: [scout, inbox], history: [], library: EMPTY_LIBRARY });
     expect(sections.find((section) => section.title === "Asked by another bot")?.text).toContain("You're 2nd in Scout → you.");
+    expect(sections.find((section) => section.title === "Your other chats")?.text).toBe(
+      'You\'re also at work in these chats right now, newest first:\n- "Archive" (chat c9)\nThey may touch the same files or worktree as this one, so coordinate with them or work in a separate worktree.',
+    );
+    const alone = await systemPrompt({ bot: inbox, local: false, askPath: [{ botId: "bot-scout", chatId: "x" }] }, EMPTY_LIBRARY, null, { bots: [scout, inbox], history: [], library: EMPTY_LIBRARY });
+    expect(alone.sections.map((section) => section.title)).not.toContain("Your other chats");
   });
 
   it("pre-approves asking only when the user allowed it", () => {

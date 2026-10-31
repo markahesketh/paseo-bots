@@ -69,3 +69,14 @@ export function chainPrompt(path: readonly NamedHop[]): string {
   const position = ["1st", "2nd", "3rd"][path.length] ?? `${path.length + 1}th`;
   return `You're ${position} in ${names.join(" → ")} → you. You can't ask ${listNames(names)}. Your reply here goes back to ${names.at(-1)} automatically; make it the answer to its question.`;
 }
+
+/** A chat by title and id, for the prompt. */
+export interface ChatRef {
+  id: string;
+  title: string;
+}
+
+/** An asked bot's other chats that are running as its new chat starts, newest first. */
+export function otherChatsPrompt(chats: readonly ChatRef[]): string {
+  return `You're also at work in these chats right now, newest first:\n${chats.map((chat) => `- "${chat.title}" (chat ${chat.id})`).join("\n")}\nThey may touch the same files or worktree as this one, so coordinate with them or work in a separate worktree.`;
+}
