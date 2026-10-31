@@ -227,7 +227,6 @@ const TeamLogoSchema = z.object({
 });
 export type TeamLogo = z.infer<typeof TeamLogoSchema>;
 
-/** How many times in a row bots in a chain under a team may wake each other before replies pause. */
 export const WakeCapSchema = z.number().int().min(1).max(100);
 
 /** A team of bots, after OpenMausBot's teams: its members, its lead (Chief of Staff) and shared instructions. */
@@ -242,7 +241,6 @@ export const BotGroupSchema = z.object({
   memberIds: z.array(z.string()).default([]),
   /** Added to every member's prompt; only the user edits them. */
   instructions: z.string().default(""),
-  /** For chains whose root chat belongs to a member. */
   wakeCap: WakeCapSchema.default(WAKE_CAP),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -456,9 +454,7 @@ export interface PromptContext {
   playbooks: Playbook[];
   /** In a team's chat, the lead's view of the team (teamPrompt). */
   team?: string | null;
-  /** In a chat another bot asked for, the chats that led to it, root first. */
   askPath?: readonly NamedHop[];
-  /** In a chat another bot asked for, the bot's other chats running as it starts, newest first. */
   otherChats?: readonly ChatRef[];
   /** The bot's usable skills with the SKILL.md path the agent should read. Empty when the files aren't on the bot's host. */
   skills: { name: string; description: string; path: string }[];

@@ -178,7 +178,6 @@ export default function contribute(server: PluginServerContext) {
     if (!chat || !(await commands.matches(chat.botId, shell.command, shell.cwd))) return;
     await asks.approve(agent.id, request.id).catch((error: unknown) => console.error("paseo-bots: couldn't approve an allowed command", error));
   });
-  // The user's approval of a request anywhere in a chain lets its bots wake each other again.
   server.on("agent.permission_resolved", async ({ agent, requestId, resolution }, context) => {
     host.attach(context.paseo);
     await asks.permissionResolved(agent.id, requestId, resolution).catch((error: unknown) => console.error("paseo-bots: couldn't handle a resolved permission", error));

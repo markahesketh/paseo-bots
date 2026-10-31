@@ -34,7 +34,6 @@ export async function startChat(host: BotsHost, relay: Relay, bot: Bot, input: {
   });
 }
 
-/** A chat's latest turn, read from its timeline: the bot's last reply and the tools it used. */
 export async function readLastTurn(paseo: PaseoApi, agentId: string): Promise<{ reply: string; tools: string[] }> {
   const page = await paseo.agents.ref(agentId).timeline.refetch({ direction: "tail", projection: "projected", limit: 80 });
   return lastTurn(page.entries.map((entry) => entry.item as { type: string; text?: unknown; name?: unknown }));

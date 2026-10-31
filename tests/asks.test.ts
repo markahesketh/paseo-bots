@@ -4,7 +4,6 @@ import { canAsk, chainPrompt, formatAskPath, mayFollowUp, mayRead, mayTarget, pa
 const a1 = "0b6c1d2e-3f40-4a5b-8c6d-7e8f9a0b1c2d";
 const b1 = "1c7d2e3f-4a51-4b6c-9d7e-8f9a0b1c2d3e";
 const c1 = "2d8e3f40-5b62-4c7d-ae8f-9a0b1c2d3e4f";
-/** C's chat, asked by B's chat, asked by A's chat. */
 const path: AskPath = [
   { botId: "a", chatId: a1 },
   { botId: "b", chatId: b1 },

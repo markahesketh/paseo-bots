@@ -41,7 +41,6 @@ export interface FakeChat {
   reply?: string;
   pendingPermissions?: unknown[];
   updatedAt?: string;
-  /** A daemon call that fails for this chat. */
   down?: "refresh" | "send";
 }
 
@@ -51,7 +50,7 @@ interface FakeListOptions {
   page?: { limit: number };
 }
 
-/** Paseo's agents over `chats`. A send lands in `sent` and sets the chat running; one into a running chat fails, as the real daemon would interrupt it. */
+/** A send into a running chat fails, as the real daemon would interrupt it. */
 export function fakePaseo(chats: Record<string, FakeChat>, sent: Record<string, string[]> = {}) {
   const snapshot = (id: string, chat: FakeChat) => ({ id, status: chat.status, labels: chat.labels, title: chat.title ?? null, pendingPermissions: chat.pendingPermissions ?? [], lastError: null, updatedAt: chat.updatedAt ?? NOW });
   return {

@@ -19,7 +19,6 @@ export interface ToolCaller {
   host: BotsHost;
   /** Starts other bots' chats with their tools. */
   relay: Relay;
-  /** Replies and follow-ups between bots' chats. */
   asks: Asks;
 }
 
