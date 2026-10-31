@@ -34,6 +34,47 @@ export function makeBot(patch: Partial<Bot> = {}): Bot {
   };
 }
 
+export interface FakeChat {
+  status: string;
+  labels: Record<string, string>;
+  title?: string;
+  reply?: string;
+  pendingPermissions?: unknown[];
+  /** A daemon call that fails for this chat. */
+  down?: "refresh" | "send";
+}
+
+/** Paseo's agents over `chats`. A send lands in `sent` and sets the chat running; one into a running chat fails, as the real daemon would interrupt it. */
+export function fakePaseo(chats: Record<string, FakeChat>, sent: Record<string, string[]> = {}) {
+  return {
+    agents: {
+      ref: (id: string) => ({
+        refresh: async () => {
+          const chat = chats[id];
+          if (chat?.down === "refresh") throw new Error("daemon away");
+          return chat ? { agent: { id, status: chat.status, labels: chat.labels, title: chat.title ?? null, pendingPermissions: chat.pendingPermissions ?? [], lastError: null } } : null;
+        },
+        send: async (text: string) => {
+          const chat = chats[id];
+          if (!chat) throw new Error(`There's no chat ${id}.`);
+          if (chat.down === "send") throw new Error("daemon away");
+          if (chat.status === "running") throw new Error(`Sent into chat ${id} while it was running.`);
+          (sent[id] ??= []).push(text);
+          chat.status = "running";
+        },
+        timeline: {
+          refetch: async () => ({
+            entries: [
+              { item: { type: "user_message", text: "question" } },
+              ...(chats[id]?.reply ? [{ item: { type: "assistant_message", text: chats[id]!.reply } }] : []),
+            ],
+          }),
+        },
+      }),
+    },
+  } as never;
+}
+
 /** A host over in-memory settings; `values` can be mutated between calls. */
 export function fakeHost(bots: Bot[], library: Library = EMPTY_LIBRARY): BotsHost & { values(): Promise<BotSettingsValues> } {
   const values: BotSettingsValues = { bots, history: [], library };

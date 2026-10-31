@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { journalSummary, lastTurn, logLine, matchesAll, parseLog, parseSince, recentWork, redactSecrets, searchWords, snippet } from "../shared/activity";
 import { lineDiff } from "../shared/diff";
 import { newUuid } from "../shared/uuid";
-import { fakeHost, makeBot } from "./helpers";
+import { fakeHost, fakePaseo, makeBot, type FakeChat } from "./helpers";
 
 const at = (day: number, hour: number, minute = 0) => new Date(2026, 8, day, hour, minute);
 
@@ -142,7 +142,14 @@ describe("memory journal, daily log and search_chats", () => {
     const host = fakeHost([makeBot({ id: "bot-s", name: "Scout" })]);
     host.chatOf = async (agentId: string) => (agentId === "other-agent" ? null : { botId: "bot-s", title: "Invoices", routineId: "routine-1", labels: {} });
     const finished: unknown[][] = [];
-    const scheduler = { finished: async (...args: unknown[]) => void finished.push(args) };
+    const scheduler = {
+      finished: async (...args: unknown[]) => {
+        finished.push(args);
+        if ((args[2] as { kind: string }).kind === "canceled") throw new Error("disk full");
+      },
+    };
+    const delivered: unknown[][] = [];
+    const asks = { turnEnded: async (...args: unknown[]) => void delivered.push(args), hasOpenAsks: () => false };
     const journal = new MemoryJournal();
     const agent = { id: newUuid(), workspaceId: null, parentAgentId: null, provider: "claude", cwd: "/", title: null };
 
@@ -165,14 +172,19 @@ describe("memory journal, daily log and search_chats", () => {
     } as never);
     // Paseo sends turn_ended with an empty timeline.
     const timeline: never[] = [];
-    await turnEnded(host, journal, scheduler, { agent, turnId: "t1", outcome: { kind: "completed" }, timeline });
-    await turnEnded(host, journal, scheduler, { agent: { ...agent, id: "other-agent" }, turnId: "t2", outcome: { kind: "completed" }, timeline });
-    await turnEnded(host, journal, scheduler, { agent, turnId: "t3", outcome: { kind: "canceled", reason: "stopped" }, timeline });
-    await turnEnded(host, journal, scheduler, { agent: { ...agent, id: "unreadable" }, turnId: "t4", outcome: { kind: "completed" }, timeline });
+    await turnEnded(host, journal, scheduler, asks, { agent, turnId: "t1", outcome: { kind: "completed" }, timeline });
+    await turnEnded(host, journal, scheduler, asks, { agent: { ...agent, id: "other-agent" }, turnId: "t2", outcome: { kind: "completed" }, timeline });
+    await turnEnded(host, journal, scheduler, asks, { agent, turnId: "t3", outcome: { kind: "canceled", reason: "stopped" }, timeline });
+    await turnEnded(host, journal, scheduler, asks, { agent: { ...agent, id: "unreadable" }, turnId: "t4", outcome: { kind: "completed" }, timeline });
     expect(finished).toEqual([
       ["routine-1", agent.id, { kind: "completed" }, "Sent the three Q3 invoices to Acme."],
       ["routine-1", agent.id, { kind: "canceled", reason: "stopped" }, "Sent the three Q3 invoices to Acme."],
       ["routine-1", "unreadable", { kind: "completed" }, ""],
+    ]);
+    // The reply goes out even when recording the run failed, and not at all when the turn couldn't be read.
+    expect(delivered).toEqual([
+      [agent.id, { kind: "completed" }, "Sent the three Q3 invoices to Acme."],
+      [agent.id, { kind: "canceled", reason: "stopped" }, "Sent the three Q3 invoices to Acme."],
     ]);
     expect((await listLogDays("bot-s")).days).toEqual([{ day: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/), lines: 1 }]);
     const [entry] = await recentLogEntries("bot-s", 1);
@@ -194,7 +206,7 @@ describe("memory journal, daily log and search_chats", () => {
         ref: (id: string) => ({ timeline: { refetch: async () => ({ entries: id === past.id ? entries : [{ item: { type: "user_message", text: "q3 invoices again" }, timestamp: new Date().toISOString() }] }) } }),
       },
     } as never);
-    const caller = { bot: makeBot({ id: "bot-s" }), agentId: current, host, relay: null as never };
+    const caller = { bot: makeBot({ id: "bot-s" }), agentId: current, host, relay: null as never, asks: null as never };
     const found = await searchChats.run({ query: "q3 invoices" }, caller);
     expect(listed[0]).toMatchObject({ filter: { labels: { "paseo-bots.bot": "bot-s" }, includeArchived: true } });
     expect(found).toContain("Memory:\n- [memory/log/");
@@ -203,5 +215,31 @@ describe("memory journal, daily log and search_chats", () => {
     expect(found).not.toContain("again");
     expect(await searchChats.run({ query: "unicorns" }, caller)).toBe("Nothing matched.");
     await expect(searchChats.run({}, caller)).rejects.toThrow("Give a few words");
+  });
+
+  it("records a routine run that asked a bot with the turn that answers", async () => {
+    const { turnEnded } = await import("../server/activity");
+    const { Asks } = await import("../server/asks");
+    const { MemoryJournal } = await import("../server/journal");
+    const host = fakeHost([makeBot({ id: "a", name: "A", routines: [] }), makeBot({ id: "b", name: "B" })]);
+    const chats: Record<string, FakeChat> = {
+      r1: { status: "idle", labels: { "paseo-bots.bot": "a", "paseo-bots.routine": "rt-1" }, reply: "Asked B in chat b1." },
+      b1: { status: "idle", labels: { "paseo-bots.bot": "b", "paseo-bots.ask-path": "a@r1" }, reply: "42" },
+    };
+    const sent: Record<string, string[]> = {};
+    host.attach(fakePaseo(chats, sent));
+    const asks = new Asks(host);
+    asks.expect("b1", "r1");
+    const finished: unknown[][] = [];
+    const scheduler = { finished: async (...args: unknown[]) => void finished.push(args) };
+    const end = (id: string) => turnEnded(host, new MemoryJournal(), scheduler, asks, { agent: { id, workspaceId: null, parentAgentId: null, provider: "claude", cwd: "/", title: null }, turnId: id, outcome: { kind: "completed" }, timeline: [] });
+    await end("r1");
+    expect(finished).toEqual([]);
+    await end("b1");
+    expect(sent.r1).toHaveLength(1);
+    chats.r1!.status = "idle";
+    chats.r1!.reply = "B says 42.";
+    await end("r1");
+    expect(finished).toEqual([["rt-1", "r1", { kind: "completed" }, "B says 42."]]);
   });
 });

@@ -3,6 +3,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { checkAppCall, type AppLimit } from "../shared/apps";
 import type { Bot, McpServerConfig } from "../shared/bot";
 import { accounts, appTools, connectedSlugs, deadline, readState, session, writeState } from "./composio";
+import type { Asks } from "./asks";
 import type { BotsHost } from "./host";
 import { answerMcp, type BotTool } from "./tools/mcp";
 
@@ -82,6 +83,7 @@ export class Relay {
   constructor(
     private readonly host: BotsHost,
     private readonly tools: readonly BotTool[],
+    private readonly asks: Asks,
   ) {}
 
   addRoute(route: RelayRoute): void {
@@ -178,7 +180,7 @@ export class Relay {
     const bot = await this.host.bot(botId);
     const id = (parsed.message.id as string | number | undefined) ?? null;
     if (!bot || bot.archived) return json(response, 403, { jsonrpc: "2.0", id, error: { code: -32001, message: "This bot no longer exists." } });
-    const answer = await answerMcp(parsed.message, this.tools, { bot, agentId, host: this.host, relay: this });
+    const answer = await answerMcp(parsed.message, this.tools, { bot, agentId, host: this.host, relay: this, asks: this.asks });
     if (!answer) return response.writeHead(202).end();
     json(response, 200, answer);
   }

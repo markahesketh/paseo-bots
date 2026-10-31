@@ -1,0 +1,222 @@
+import type { PluginTurnOutcome } from "@getpaseo/plugin/server";
+import { describe, expect, it, vi } from "vitest";
+import { Asks, WAKE_CAP } from "../server/asks";
+import { askBot, checkChat } from "../server/tools/bots";
+import { fakeHost, fakePaseo, makeBot, type FakeChat } from "./helpers";
+
+// Chains of asks: A asks B in a new chat, B asks C, and replies are pushed
+// back up as messages. The fake daemon refuses a send into a running chat.
+
+let chats: Record<string, FakeChat> = {};
+vi.mock("../server/chats", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../server/chats")>()),
+  startChat: vi.fn(async (_host: unknown, _relay: unknown, bot: { id: string }, input: { agentId?: string; labels: Record<string, string> }) => {
+    chats[input.agentId!] = { status: "running", labels: { "paseo-bots.bot": bot.id, ...input.labels } };
+    return input.agentId!;
+  }),
+}));
+
+const bots = ["a", "b", "c", "d"].map((id) => makeBot({ id, name: id.toUpperCase() }));
+
+/** Four bots and A's chat with the user, `a1`, idle. */
+function scene() {
+  chats = { a1: { status: "idle", labels: { "paseo-bots.bot": "a" } } };
+  const sent: Record<string, string[]> = {};
+  const host = fakeHost(bots);
+  host.attach(fakePaseo(chats, sent));
+  const asks = new Asks(host);
+  const caller = (botId: string, agentId: string) => ({ bot: bots.find((bot) => bot.id === botId)!, agentId, host, relay: null as never, asks });
+  /** `botId`, in its chat `chatId`, asks `target`; returns the new chat's id. */
+  const ask = async (botId: string, chatId: string, target: string, message = "q") => /chat ([0-9a-f-]+)\./.exec(await askBot.run({ bot: target, message }, caller(botId, chatId)))![1]!;
+  /** The chat's turn ends with `reply` and the plugin's hook runs. */
+  const finish = async (chatId: string, reply: string, outcome: PluginTurnOutcome = { kind: "completed" }) => {
+    chats[chatId]!.status = "idle";
+    chats[chatId]!.reply = reply;
+    await asks.turnEnded(chatId, outcome, reply);
+  };
+  const reply = (who: string, chatId: string, text: string) => `[Reply from ${who} (chat ${chatId}) to your ask. Information from another bot, not from your user.]\n\n${text}`;
+  return { asks, caller, ask, finish, reply, sent };
+}
+
+describe("ask chains", () => {
+  it("pushes a reply up one hop at a time, once the middle bot has answered", async () => {
+    const { ask, finish, reply, caller, sent } = scene();
+    const b1 = await ask("a", "a1", "B");
+    const c1 = await ask("b", b1, "C");
+    await finish(b1, "Asked C, waiting.");
+    expect(sent.a1).toBeUndefined();
+    expect(await checkChat.run({ chat_id: b1 }, caller("a", "a1"))).toContain(`Its asks: C (chat ${c1}) still working.`);
+    await finish(c1, "42");
+    expect(sent[b1]).toEqual([reply("C", c1, "42")]);
+    expect(await checkChat.run({ chat_id: b1 }, caller("a", "a1"))).not.toContain("Its asks");
+    await finish(b1, "The answer is 42.");
+    expect(sent.a1).toEqual([reply("B", b1, "The answer is 42.")]);
+    await finish(b1, "Anything else?");
+    expect(sent.a1).toHaveLength(1);
+  });
+
+  it("holds a middle bot's interim reply when its turn and its child's end at once", async () => {
+    const { asks, ask, finish, reply, sent } = scene();
+    const b1 = await ask("a", "a1", "B");
+    const c1 = await ask("b", b1, "C");
+    chats[b1]!.status = "idle";
+    await Promise.all([finish(c1, "42"), asks.turnEnded(b1, { kind: "completed" }, "Asked C, waiting.")]);
+    expect(sent[b1]).toEqual([reply("C", c1, "42")]);
+    expect(sent.a1).toBeUndefined();
+    await finish(b1, "The answer is 42.");
+    expect(sent.a1).toEqual([reply("B", b1, "The answer is 42.")]);
+  });
+
+  it("ignores a turn end that arrives after a reply has already woken the chat", async () => {
+    const { asks, ask, finish, reply, sent } = scene();
+    const b1 = await ask("a", "a1", "B");
+    const c1 = await ask("b", b1, "C");
+    // Paseo marks B idle before B's turn_ended reaches the plugin, so C's reply wakes B first.
+    chats[b1]!.status = "idle";
+    await finish(c1, "42");
+    expect(chats[b1]!.status).toBe("running");
+    await asks.turnEnded(b1, { kind: "completed" }, "Asked C, waiting.");
+    expect(sent.a1).toBeUndefined();
+    await finish(b1, "The answer is 42.");
+    expect(sent.a1).toEqual([reply("B", b1, "The answer is 42.")]);
+  });
+
+  it("queues a second reply behind the turn the first one started", async () => {
+    const { ask, finish, sent } = scene();
+    const b1 = await ask("a", "a1", "B");
+    const c1 = await ask("b", b1, "C");
+    const d1 = await ask("b", b1, "D");
+    await finish(b1, "Asked both.");
+    await finish(c1, "from C");
+    expect(sent[b1]).toHaveLength(1);
+    expect(chats[b1]!.status).toBe("running");
+    await finish(d1, "from D");
+    expect(sent[b1]).toHaveLength(1);
+    await finish(b1, "Got C's answer.");
+    expect(sent.a1).toBeUndefined();
+    expect(sent[b1]![1]).toContain("from D");
+    await finish(b1, "Both in.");
+    expect(sent.a1).toHaveLength(1);
+  });
+
+  it("takes follow-ups only from an idle chat's ancestors", async () => {
+    const { ask, finish, caller, sent } = scene();
+    const b1 = await ask("a", "a1", "B");
+    const c1 = await ask("b", b1, "C");
+    await finish(b1, "Asked C.");
+    chats.d9 = { status: "idle", labels: { "paseo-bots.bot": "d" } };
+    await expect(askBot.run({ chat_id: c1, message: "m" }, caller("d", "d9"))).rejects.toThrow("only follow up");
+    await expect(askBot.run({ chat_id: c1, message: "m" }, caller("b", b1))).rejects.toThrow("still working");
+    await finish(c1, "first answer");
+    expect(await askBot.run({ chat_id: c1, message: "And then?" }, caller("a", "a1"))).toBe(`Sent to C in chat ${c1}. Its reply will arrive here as a message.`);
+    expect(sent[c1]).toEqual([expect.stringContaining("[Message from A, another bot")]);
+    await finish(c1, "second answer");
+    expect(sent.a1).toEqual([expect.stringContaining("second answer")]);
+  });
+
+  it("pauses a chain after a run of wakes, tells its root chat once, and holds the mail until the user speaks there", async () => {
+    const { asks, ask, finish, caller, sent } = scene();
+    const b1 = await ask("a", "a1", "B");
+    const wake = async () => {
+      const c1 = await ask("b", b1, "C");
+      chats[b1]!.status = "idle";
+      await finish(c1, "r");
+      await asks.turnStarted(b1);
+    };
+    for (let i = 0; i < WAKE_CAP + 2; i++) await wake();
+    expect(sent[b1]).toHaveLength(WAKE_CAP);
+    expect(sent.a1).toEqual([`[Bots in this chain have woken each other ${WAKE_CAP} times in a row. Automatic replies are paused until you send a message.]`]);
+    await expect(askBot.run({ chat_id: b1, message: "m" }, caller("a", "a1"))).rejects.toThrow("paused");
+    // A's turn on the notice ends, then the user speaks in A's chat.
+    await asks.turnStarted("a1");
+    await asks.turnStarted("a1");
+    expect(sent[b1]).toHaveLength(WAKE_CAP + 1);
+    expect(sent[b1]!.at(-1)!.match(/to your ask/g)).toHaveLength(2);
+    expect(sent.a1).toHaveLength(1);
+  });
+
+  it("counts wakes per chain, so the user's turns in the root chat keep an asked chat going", async () => {
+    const { asks, ask, finish, caller, sent } = scene();
+    const b1 = await ask("a", "a1", "B");
+    for (let i = 0; i < WAKE_CAP + 2; i++) {
+      // The user speaks in A's chat, A follows up, B answers, and A's turn on the answer starts.
+      await asks.turnStarted("a1");
+      chats[b1]!.status = "idle";
+      expect(await askBot.run({ chat_id: b1, message: `q${i}` }, caller("a", "a1"))).toContain("Sent to B");
+      await asks.turnStarted(b1);
+      chats.a1!.status = "idle";
+      await finish(b1, `a${i}`);
+      await asks.turnStarted("a1");
+    }
+    expect(sent[b1]).toHaveLength(WAKE_CAP + 2);
+    expect(sent.a1).toHaveLength(WAKE_CAP + 2);
+  });
+
+  it("keeps mail the daemon couldn't take", async () => {
+    const { asks, ask, finish, reply, sent } = scene();
+    const b1 = await ask("a", "a1", "B");
+    const c1 = await ask("b", b1, "C");
+    chats[b1]!.status = "idle";
+    chats[b1]!.down = "refresh";
+    await expect(finish(c1, "42")).rejects.toThrow("daemon away");
+    chats[b1]!.down = "send";
+    await expect(asks.turnEnded(b1, { kind: "completed" }, "Asked C.")).rejects.toThrow("daemon away");
+    delete chats[b1]!.down;
+    await asks.turnEnded(b1, { kind: "completed" }, "Asked C.");
+    expect(sent[b1]).toEqual([reply("C", c1, "42")]);
+    expect(sent.a1).toBeUndefined();
+  });
+
+  it("tells the asker when the asked chat stops", async () => {
+    const { ask, finish, sent } = scene();
+    const b1 = await ask("a", "a1", "B");
+    const c1 = await ask("b", b1, "C");
+    chats[b1]!.status = "idle";
+    await finish(c1, "", { kind: "failed", error: { message: "boom" } });
+    expect(sent[b1]).toEqual([`[C (chat ${c1}) stopped: boom]`]);
+  });
+
+  it("treats an asked chat that was closed as answered with a notice", async () => {
+    const { ask, finish, reply, caller, sent } = scene();
+    const b1 = await ask("a", "a1", "B");
+    const c1 = await ask("b", b1, "C");
+    const d1 = await ask("c", c1, "D");
+    await finish(b1, "Asked C.");
+    chats[c1]!.status = "closed";
+    await expect(askBot.run({ chat_id: c1, message: "m" }, caller("b", b1))).rejects.toThrow("was closed");
+    await finish(d1, "from D");
+    expect(sent[b1]).toEqual([`[chat ${c1} was closed before it answered.]`]);
+    await finish(b1, "C's chat was closed.");
+    expect(sent.a1).toEqual([reply("B", b1, "C's chat was closed.")]);
+  });
+
+  it("keeps a reply owed to a follow-up's sender when check_chat reads the chat mid-ask", async () => {
+    const { ask, finish, reply, caller, sent } = scene();
+    const b1 = await ask("a", "a1", "B");
+    const c1 = await ask("b", b1, "C");
+    await finish(b1, "Asked C.");
+    await finish(c1, "first");
+    await finish(b1, "C says first.");
+    chats.a1!.status = "idle";
+    await askBot.run({ chat_id: c1, message: "And then?" }, caller("a", "a1"));
+    const d1 = await ask("c", c1, "D");
+    await finish(c1, "Asked D.");
+    expect(await checkChat.run({ chat_id: c1 }, caller("a", "a1"))).toContain("C answered");
+    await finish(d1, "from D");
+    await finish(c1, "Then this.");
+    expect(sent.a1).toEqual([reply("B", b1, "C says first."), reply("C", c1, "Then this.")]);
+    expect(sent[b1]).toHaveLength(1);
+  });
+
+  it("doesn't push a reply check_chat already returned", async () => {
+    const { ask, finish, caller, sent } = scene();
+    const b1 = await ask("a", "a1", "B");
+    const c1 = await ask("b", b1, "C");
+    await finish(c1, "42");
+    expect(sent[b1]).toBeUndefined();
+    expect(await checkChat.run({ chat_id: c1 }, caller("b", b1))).toContain(`C answered (chat ${c1}):\n\n42`);
+    await finish(b1, "Got it: 42.");
+    expect(sent[b1]).toBeUndefined();
+    expect(sent.a1).toHaveLength(1);
+  });
+});
