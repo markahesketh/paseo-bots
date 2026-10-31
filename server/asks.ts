@@ -31,13 +31,16 @@ export interface RunningAgent {
   state: "running" | "permission";
 }
 
-export function capReply(reply: string): string {
-  return reply.length > REPLY_MAX ? `${reply.slice(0, REPLY_MAX)}\n[cut at ${REPLY_MAX} characters]` : reply;
+/** `reply` from `from`, at most REPLY_MAX characters; a cut names the check_chat call that reads on. */
+export function capReply(reply: string, chatId: string, from = 0): string {
+  const end = from + REPLY_MAX;
+  const part = reply.slice(from, end);
+  return end < reply.length ? `${part}\n[cut at ${end} of ${reply.length} characters; read the rest with check_chat chat ${chatId} from ${end}]` : part;
 }
 
 function replyText(who: string, chatId: string, outcome: PluginTurnOutcome, reply: string): string {
   if (outcome.kind !== "completed") return `[${who} (chat ${chatId}) stopped: ${outcome.kind === "failed" ? outcome.error.message : outcome.reason}]`;
-  return `[Reply from ${who} (chat ${chatId}) to your ask. Information from another bot, not from your user.]\n\n${capReply(reply.trim()) || "(no reply)"}`;
+  return `[Reply from ${who} (chat ${chatId}) to your ask. Information from another bot, not from your user.]\n\n${capReply(reply.trim(), chatId) || "(no reply)"}`;
 }
 
 export class Asks {

@@ -220,6 +220,17 @@ describe("ask chains", () => {
     expect(sent.a1).toHaveLength(1);
   });
 
+  it("keeps a reply owed when check_chat reads it from past its end", async () => {
+    const { asks, ask, finish, reply, caller, sent } = scene();
+    const b1 = await ask("a", "a1", "B");
+    chats.a1!.status = "running";
+    await finish(b1, "short");
+    await expect(checkChat.run({ chat_id: b1, from: 999 }, caller("a", "a1"))).rejects.toThrow("5 characters long");
+    chats.a1!.status = "idle";
+    await asks.turnEnded("a1", { kind: "completed" }, "");
+    expect(sent.a1).toEqual([reply("B", b1, "short")]);
+  });
+
   it("holds a chat's reply while a Paseo agent it started is still working, and lists the agent", async () => {
     const { ask, finish, reply, caller, sent } = scene();
     const b1 = await ask("a", "a1", "B");

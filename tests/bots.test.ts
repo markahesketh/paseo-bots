@@ -87,6 +87,17 @@ describe("asking other bots", () => {
     await expect(checkChat.run({ chat_id: "nope" }, caller)).rejects.toThrow("no chat with that id");
   });
 
+  it("reads a long answer in parts, each naming the call for the next", async () => {
+    const { checkChat } = await import("../server/tools/bots");
+    const host = fakeHost([makeBot({ id: "bot-scout", name: "Scout" })]);
+    const reply = Array.from({ length: 20_000 }, (_, i) => String(i % 10)).join("");
+    host.attach(fakePaseo({ long: { status: "idle", title: "Report", labels: { "paseo-bots.bot": "bot-scout" }, reply } }));
+    const caller = { bot: makeBot({ id: "bot-scout", name: "Scout" }), agentId: "x", host, relay: null as never, asks: new Asks(host) };
+    expect(await checkChat.run({ chat_id: "long" }, caller)).toBe(`"Report": You answered (chat long):\n\n${reply.slice(0, 8000)}\n[cut at 8000 of 20000 characters; read the rest with check_chat chat long from 8000]`);
+    expect(await checkChat.run({ chat_id: "long", from: 16_000 }, caller)).toBe(`"Report": You answered (chat long), from character 16000 of 20000:\n\n${reply.slice(16_000)}`);
+    await expect(checkChat.run({ chat_id: "long", from: 20_000 }, caller)).rejects.toThrow("20000 characters long");
+  });
+
   it("tells an asked chat its place in the chain, by name", async () => {
     const scout = makeBot({ id: "bot-scout", name: "Scout" });
     const inbox = makeBot({ id: "bot-inbox", name: "Inbox" });
