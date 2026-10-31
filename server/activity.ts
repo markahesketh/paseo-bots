@@ -17,7 +17,7 @@ export async function turnStarted(host: BotsHost, journal: MemoryJournal, asks: 
   if (botId) await journal.begin(botId);
 }
 
-export async function turnEnded(host: BotsHost, journal: MemoryJournal, scheduler: Pick<RoutineScheduler, "finished">, asks: Pick<Asks, "turnEnded" | "hasOpenAsks">, { agent, outcome, timeline }: PluginLifecycleEvents["agent.turn_ended"]): Promise<void> {
+export async function turnEnded(host: BotsHost, journal: MemoryJournal, scheduler: Pick<RoutineScheduler, "finished">, asks: Pick<Asks, "turnEnded" | "waiting">, { agent, outcome, timeline }: PluginLifecycleEvents["agent.turn_ended"]): Promise<void> {
   const chat = await host.chatOf(agent.id);
   if (!chat) return;
   const { botId } = chat;
@@ -30,10 +30,11 @@ export async function turnEnded(host: BotsHost, journal: MemoryJournal, schedule
   });
   const { reply, tools } = turn ?? lastTurn(timeline);
   const line = outcome.kind === "canceled" ? null : logLine({ at: new Date(), chat: title, reply, tools, failure: outcome.kind === "failed" ? outcome.error.message : null });
+  const { routineId } = chat;
   const steps: [string, Promise<unknown> | null][] = [
     ["note memory changes", journal.end(botId, { id: agent.id, title })],
-    // A run that asked a bot finishes with the turn that answers, not with "Asked B...".
-    ["record a routine run", chat.routineId && !asks.hasOpenAsks(agent.id) ? scheduler.finished(chat.routineId, agent.id, outcome, reply) : null],
+    // A run that asked a bot or started an agent finishes with the turn that answers, not with "Asked B...".
+    ["record a routine run", routineId ? asks.waiting(agent.id).then((waiting) => (waiting ? null : scheduler.finished(routineId, agent.id, outcome, reply))) : null],
     ["deliver a bot's reply", turn && asks.turnEnded(agent.id, outcome, turn.reply)],
     ["write the daily log", line ? appendDailyLog(botId, line) : null],
   ];

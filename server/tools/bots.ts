@@ -143,7 +143,7 @@ export const checkChat = defineTool({
     const owner = chat.labels[BOT_LABEL] ?? "";
     if (!mayRead(bot.id, { botId: owner, path: parseAskPath(chat.labels[ASK_PATH_LABEL]) })) throw new Error("You can only check your own chats and ones in a chain you asked.");
     // A reply read here isn't pushed into this chat as well.
-    if (chat.state !== "running" && chat.state !== "permission") asks.consume(chatId, agentId);
+    if (chat.state !== "running" && chat.state !== "permission") await asks.consume(chatId, agentId);
     const who = owner === bot.id ? "You" : await nameOf(host, chat.labels);
     const lines = [`"${chat.title}": ${await describeChat(paseo, chat, who, chatId)}`];
     const children = await Promise.all(
@@ -153,7 +153,9 @@ export const checkChat = defineTool({
         return state ? `${await nameOf(host, state.labels)} (chat ${child}) ${ASK_STATE[state.state]}` : `chat ${child} is gone`;
       }),
     );
-    if (children.length) lines.push(`Its asks: ${children.join("; ")}.`);
+    const agents = (await asks.agentsOf(chatId)).map((agent) => `agent ${agent.title} (${agent.id}) ${ASK_STATE[agent.state]}`);
+    const open = [...children, ...agents];
+    if (open.length) lines.push(`Its asks: ${open.join("; ")}.`);
     return lines.join("\n");
   },
 });

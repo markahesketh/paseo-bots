@@ -219,4 +219,19 @@ describe("ask chains", () => {
     expect(sent[b1]).toBeUndefined();
     expect(sent.a1).toHaveLength(1);
   });
+
+  it("holds a chat's reply while a Paseo agent it started is still working, and lists the agent", async () => {
+    const { ask, finish, reply, caller, sent } = scene();
+    const b1 = await ask("a", "a1", "B");
+    chats.w1 = { status: "running", title: "Fix login", labels: { "paseo.parent-agent-id": b1 } };
+    await finish(b1, "Under way.");
+    expect(sent.a1).toBeUndefined();
+    expect(await checkChat.run({ chat_id: b1 }, caller("a", "a1"))).toContain(`Its asks: agent Fix login (w1) still working.`);
+    chats.w1!.pendingPermissions = [{}];
+    expect(await checkChat.run({ chat_id: b1 }, caller("a", "a1"))).toContain("agent Fix login (w1) waiting for approval.");
+    chats.w1 = { status: "idle", title: "Fix login", labels: { "paseo.parent-agent-id": b1 } };
+    // Paseo wakes B with the agent's finish notice; that turn's end carries the answer.
+    await finish(b1, "Merged.");
+    expect(sent.a1).toEqual([reply("B", b1, "Merged.")]);
+  });
 });

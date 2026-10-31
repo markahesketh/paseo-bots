@@ -149,7 +149,7 @@ describe("memory journal, daily log and search_chats", () => {
       },
     };
     const delivered: unknown[][] = [];
-    const asks = { turnEnded: async (...args: unknown[]) => void delivered.push(args), hasOpenAsks: () => false };
+    const asks = { turnEnded: async (...args: unknown[]) => void delivered.push(args), waiting: async () => false };
     const journal = new MemoryJournal();
     const agent = { id: newUuid(), workspaceId: null, parentAgentId: null, provider: "claude", cwd: "/", title: null };
 
