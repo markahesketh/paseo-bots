@@ -111,7 +111,7 @@ export function TeamSheet({
             <TextAreaField colors={colors} accessibilityLabel="Shared instructions" value={instructions} onChangeText={setInstructions} minHeight={160} placeholder="We handle the family's paperwork. Keep anything with an account number out of replies." />
           </SettingsCard>
         </SettingsSection>
-        <SettingsSection title="Automatic replies" info="Bots a member asks wake each other with their replies. After this many in a row they pause until you send a message or answer a permission request in the chain.">
+        <SettingsSection title="Automatic replies" info="Bots a member asks wake each other with their replies. After this many in a row they pause until you send a message or approve a request in the chain.">
           <SettingsCard>
             <InputField colors={colors} label="Replies in a row" hint="1 to 100" error={wakeCapOk ? null : "A whole number from 1 to 100"} initialValue={String(wakeCap)} keyboardType="number-pad" onChangeText={(text) => setWakeCap(Number(text.trim()))} />
           </SettingsCard>

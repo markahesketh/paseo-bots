@@ -73,6 +73,8 @@ With teams, the Bots screen gets a tab for each team, and **Other bots** for bot
 
 Whether a bot may ask others for help is set in its settings under **Permissions → Contact other bots**: **Ask first**, **Allowed** or **Off**.
 
+A bot asks another in a chat of the other bot's own, and that bot can ask a third, in chains of up to five. Replies come back as messages in the chat that asked, so a bot carries on meanwhile, and a follow-up stays in the same chat. Bots in a chain wake each other with their replies; after a number of wakes in a row, set per team under **Automatic replies**, they pause until you send a message or approve a request in the chain.
+
 ### Skills & Tools
 
 Press **Skills & Tools** at the bottom of the bot list.
