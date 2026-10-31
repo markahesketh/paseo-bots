@@ -115,6 +115,16 @@ describe("promptSections", () => {
     expect(sections[4]!.text).toContain('- pdf: PDFs. Read "/m/skills/pdf/SKILL.md"');
   });
 
+  it("tells a chat four asks deep that it can't ask further", () => {
+    const hop = (botId: string) => ({ botId, chatId: `${botId}-1`, name: botId.toUpperCase() });
+    const context = { memory: "", memoryPath: null, recentWork: [], playbooks: [], skills: [], paseoTools: false, botTools: true, apps: [] };
+    const deep = promptSections(bot(), { ...context, askPath: ["a", "b", "c", "d"].map(hop) });
+    expect(deep.map((section) => section.title)).toEqual(["Persona", "Standing instructions", "Asked by another bot", "Bot tools"]);
+    expect(deep[2]!.text).toContain("You're 5th in A → B → C → D → you. You can't ask A, B, C or D.");
+    expect(deep[3]!.text).not.toContain("ask_bot");
+    expect(promptSections(bot(), { ...context, askPath: ["a", "b", "c"].map(hop) })[3]!.text).toContain("ask_bot");
+  });
+
   it("leaves out memory and skills when the bot has no local folder", () => {
     expect(promptSections(bot({ soul: "" }), { memory: "", memoryPath: null, recentWork: [], playbooks: [], skills: [], paseoTools: false, botTools: false, apps: [] }).map((section) => section.title)).toEqual(["Persona"]);
   });

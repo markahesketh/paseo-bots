@@ -1,4 +1,5 @@
 import { lastTurn } from "../shared/activity";
+import { ASK_PATH_LABEL, parseAskPath } from "../shared/asks";
 import type { Bot } from "../shared/bot";
 import { startBotChat } from "../shared/chat";
 import { newUuid } from "../shared/uuid";
@@ -18,7 +19,7 @@ export async function startChat(host: BotsHost, relay: Relay, bot: Bot, input: {
   if (bot.hostId) throw new Error(`${bot.name} runs on another host, so its chats can't be started from here.`);
   const library = await host.library();
   const home = await ensureBotHome({ botId: bot.id });
-  const { systemPrompt: system } = await systemPrompt({ bot, local: true, message: input.prompt }, library, paseo, await host.values());
+  const { systemPrompt: system } = await systemPrompt({ bot, local: true, message: input.prompt, askPath: parseAskPath(input.labels[ASK_PATH_LABEL]) }, library, paseo, await host.values());
   const agentId = input.agentId ?? newUuid();
   return startBotChat(paseo, {
     bot,
