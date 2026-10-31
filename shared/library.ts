@@ -139,7 +139,7 @@ export function addImportedBots(values: BotSettingsValues, imported: readonly Im
   const idAt = (position: number) => imported[position]?.bot.id;
   const groups = teams.reduce((current, team) => {
     const memberIds = team.members.flatMap((position) => idAt(position) ?? []);
-    const draft = { name: team.name, logo: team.logo, leadId: team.lead === null ? null : (idAt(team.lead) ?? null), memberIds, instructions: team.instructions };
+    const draft = { name: team.name, logo: team.logo, leadId: team.lead === null ? null : (idAt(team.lead) ?? null), memberIds, instructions: team.instructions, wakeCap: team.wakeCap };
     return memberIds.length ? saveTeam(current, null, draft, newGroupId(), now) : current;
   }, values.groups ?? []);
   return { ...values, bots, library, groups };

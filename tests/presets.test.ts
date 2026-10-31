@@ -65,15 +65,15 @@ describe("team files", () => {
     const bots = [makeBot({ id: "bot-a", name: "Juno" }), makeBot({ id: "bot-b", name: "Mika" })];
     const logo = { seed: "s", palette: 2, imageUrl: null };
     const groups = [
-      { id: "t1", name: "Studio", logo, leadId: "bot-a", memberIds: ["bot-a", "bot-b", "bot-gone"], instructions: "Ship Fridays.", createdAt: "", updatedAt: "" },
-      { id: "t2", name: "Empty", logo: null, leadId: null, memberIds: ["bot-gone"], instructions: "", createdAt: "", updatedAt: "" },
+      { id: "t1", name: "Studio", logo, leadId: "bot-a", memberIds: ["bot-a", "bot-b", "bot-gone"], instructions: "Ship Fridays.", wakeCap: 3, createdAt: "", updatedAt: "" },
+      { id: "t2", name: "Empty", logo: null, leadId: null, memberIds: ["bot-gone"], instructions: "", wakeCap: 10, createdAt: "", updatedAt: "" },
     ];
     const { json } = await exportTeam({ bots, groups, includeMemory: false }, EMPTY_LIBRARY);
-    expect(JSON.parse(json).teams).toEqual([{ name: "Studio", logo, lead: 0, members: [0, 1], instructions: "Ship Fridays." }]);
+    expect(JSON.parse(json).teams).toEqual([{ name: "Studio", logo, lead: 0, members: [0, 1], instructions: "Ship Fridays.", wakeCap: 3 }]);
     const imported = await importTeam({ json });
     const values = addImportedBots({ bots: [makeBot({ id: "old", name: "Juno" })], history: [] }, imported.bots, imported.teams, "now");
     const [juno, mika] = [values.bots[1]!, values.bots[2]!];
     expect([juno.name, mika.name]).toEqual(["Juno 2", "Mika"]);
-    expect(values.groups).toMatchObject([{ name: "Studio", logo, leadId: juno.id, memberIds: [juno.id, mika.id], instructions: "Ship Fridays." }]);
+    expect(values.groups).toMatchObject([{ name: "Studio", logo, leadId: juno.id, memberIds: [juno.id, mika.id], instructions: "Ship Fridays.", wakeCap: 3 }]);
   });
 });

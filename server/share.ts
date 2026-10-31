@@ -210,7 +210,7 @@ function teamsInFile(bots: readonly Bot[], groups: readonly BotGroup[]): TeamFil
     const members = [...new Set([...(group.leadId ? [group.leadId] : []), ...group.memberIds])].flatMap((id) => index.get(id) ?? []);
     if (members.length === 0) return [];
     const lead = group.leadId ? (index.get(group.leadId) ?? null) : null;
-    return [{ name: group.name, logo: group.logo, lead, members, instructions: group.instructions }];
+    return [{ name: group.name, logo: group.logo, lead, members, instructions: group.instructions, wakeCap: group.wakeCap }];
   });
 }
 
