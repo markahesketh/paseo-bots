@@ -21,6 +21,16 @@ export interface Mail {
   notice?: true;
 }
 
+/** Paseo's label on an agent a chat started with its create_agent tool; a detached one carries none. */
+const PARENT_AGENT_LABEL = "paseo.parent-agent-id";
+
+/** A Paseo agent a chat started and is still waiting on. */
+export interface RunningAgent {
+  id: string;
+  title: string;
+  state: "running" | "permission";
+}
+
 export function capReply(reply: string): string {
   return reply.length > REPLY_MAX ? `${reply.slice(0, REPLY_MAX)}\n[cut at ${REPLY_MAX} characters]` : reply;
 }
@@ -64,9 +74,9 @@ export class Asks {
     return this.asked.get(chatId) ?? [];
   }
 
-  /** check_chat handed `chatId`'s reply to `replyTo` itself, so it isn't pushed there as well. A chat still waiting on its own ask keeps owing its answer. */
-  consume(chatId: string, replyTo: string): void {
-    if (this.hasOpenAsks(chatId)) return;
+  /** check_chat handed `chatId`'s reply to `replyTo` itself, so it isn't pushed there as well. A chat still waiting on something keeps owing its answer. */
+  async consume(chatId: string, replyTo: string): Promise<void> {
+    if (await this.waiting(chatId)) return;
     if (this.awaiting.get(chatId) === replyTo) this.forget(chatId);
     const queued = this.mail.get(replyTo);
     if (queued) this.mail.set(replyTo, queued.filter((item) => item.from !== chatId));
@@ -76,6 +86,20 @@ export class Asks {
   hasOpenAsks(chatId: string): boolean {
     for (const replyTo of this.awaiting.values()) if (replyTo === chatId) return true;
     return (this.mail.get(chatId) ?? []).some((item) => !item.notice);
+  }
+
+  /** The Paseo agents the chat started and hasn't heard back from. Paseo wakes the chat when one finishes, so that turn carries the answer. */
+  async agentsOf(chatId: string): Promise<RunningAgent[]> {
+    const { entries } = await this.host.requirePaseo().agents.list({ filter: { labels: { [PARENT_AGENT_LABEL]: chatId } } });
+    return entries.flatMap(({ agent }) => {
+      const state = agent.pendingPermissions?.length ? "permission" : agent.status === "running" || agent.status === "initializing" ? "running" : null;
+      return state ? [{ id: agent.id, title: agent.title ?? "Untitled", state }] : [];
+    });
+  }
+
+  /** Whether the chat's latest turn can't be its answer yet: an open ask, a reply queued for it, or a Paseo agent it started. */
+  async waiting(chatId: string): Promise<boolean> {
+    return this.hasOpenAsks(chatId) || (await this.agentsOf(chatId)).length > 0;
   }
 
   /** Whether the chain under `rootChatId` has hit the wake cap, so nothing is sent in it until its user speaks. */
@@ -103,12 +127,12 @@ export class Asks {
 
   private async push(chatId: string, outcome: PluginTurnOutcome, reply: string): Promise<void> {
     if (!this.awaiting.has(chatId) || this.hasOpenAsks(chatId)) return;
-    const agent = (await this.host.requirePaseo().agents.ref(chatId).refresh())?.agent;
+    const [agent, waiting] = await Promise.all([this.host.requirePaseo().agents.ref(chatId).refresh().then((snapshot) => snapshot?.agent), this.waiting(chatId)]);
     const who = (await this.host.bot(agent?.labels?.[BOT_LABEL] ?? ""))?.name ?? "The other bot";
     // Other chats' turn ends run at the same time, and Paseo marks a chat idle before its turn_ended
     // arrives, so a child's reply may have woken this chat meanwhile; that turn's end carries the answer.
     const replyTo = this.awaiting.get(chatId);
-    if (replyTo === undefined || this.hasOpenAsks(chatId) || agent?.status === "running") return;
+    if (replyTo === undefined || waiting || this.hasOpenAsks(chatId) || agent?.status === "running") return;
     this.awaiting.delete(chatId);
     await this.deliver(replyTo, { from: chatId, text: replyText(who, chatId, outcome, reply) });
   }

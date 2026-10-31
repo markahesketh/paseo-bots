@@ -40,19 +40,34 @@ export interface FakeChat {
   title?: string;
   reply?: string;
   pendingPermissions?: unknown[];
+  updatedAt?: string;
   /** A daemon call that fails for this chat. */
   down?: "refresh" | "send";
 }
 
+interface FakeListOptions {
+  filter?: { labels?: Record<string, string>; statuses?: string[] };
+  sort?: { key: string; direction: "asc" | "desc" }[];
+  page?: { limit: number };
+}
+
 /** Paseo's agents over `chats`. A send lands in `sent` and sets the chat running; one into a running chat fails, as the real daemon would interrupt it. */
 export function fakePaseo(chats: Record<string, FakeChat>, sent: Record<string, string[]> = {}) {
+  const snapshot = (id: string, chat: FakeChat) => ({ id, status: chat.status, labels: chat.labels, title: chat.title ?? null, pendingPermissions: chat.pendingPermissions ?? [], lastError: null, updatedAt: chat.updatedAt ?? NOW });
   return {
     agents: {
+      list: async ({ filter, sort, page }: FakeListOptions = {}) => {
+        const entries = Object.entries(chats)
+          .filter(([, chat]) => Object.entries(filter?.labels ?? {}).every(([key, value]) => chat.labels[key] === value) && (!filter?.statuses || filter.statuses.includes(chat.status)))
+          .map(([id, chat]) => ({ agent: snapshot(id, chat) }));
+        if (sort?.[0]?.key === "updated_at") entries.sort((a, b) => (sort[0]!.direction === "desc" ? -1 : 1) * a.agent.updatedAt.localeCompare(b.agent.updatedAt));
+        return { entries: page ? entries.slice(0, page.limit) : entries };
+      },
       ref: (id: string) => ({
         refresh: async () => {
           const chat = chats[id];
           if (chat?.down === "refresh") throw new Error("daemon away");
-          return chat ? { agent: { id, status: chat.status, labels: chat.labels, title: chat.title ?? null, pendingPermissions: chat.pendingPermissions ?? [], lastError: null } } : null;
+          return chat ? { agent: snapshot(id, chat) } : null;
         },
         send: async (text: string) => {
           const chat = chats[id];
