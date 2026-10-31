@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import type { PaseoApi } from "./paseo";
 import { recentWork } from "../shared/activity";
-import type { AskPath, NamedHop } from "../shared/asks";
+import type { AskPath, ChatRef, NamedHop } from "../shared/asks";
 import { selectPlaybooks } from "../shared/playbooks";
 import { paseoToolsState, type PaseoToolsConfig } from "../shared/paseo-tools";
 import type { AppAccount, PromptApp } from "../shared/apps";
@@ -36,6 +36,8 @@ export interface ChatStart {
   team?: { group: BotGroup; bots: Bot[] };
   /** The chats that led to this one when another bot asked for it. */
   askPath?: readonly NamedHop[];
+  /** The bot's other chats running as this one starts, when another bot asked for it. */
+  otherChats?: readonly ChatRef[];
 }
 
 /**
@@ -48,7 +50,8 @@ export async function promptContext(bot: Bot, local: boolean, library: Library, 
   const team = start.team ? teamPrompt(start.team.group, bot, start.team.bots) : null;
   // Connected apps go through this host's relay, so bots on other hosts can't reach them.
   const askPath = start.askPath ?? [];
-  if (!local) return { memory: "", memoryPath: null, recentWork: [], playbooks, team, askPath, skills: [], paseoTools, botTools: false, apps: [] };
+  const otherChats = start.otherChats ?? [];
+  if (!local) return { memory: "", memoryPath: null, recentWork: [], playbooks, team, askPath, otherChats, skills: [], paseoTools, botTools: false, apps: [] };
   // Only skills whose SKILL.md is still what the user reviewed.
   const skills: typeof library.skills = [];
   for (const skill of botSkills(bot, library)) {
@@ -65,6 +68,7 @@ export async function promptContext(bot: Bot, local: boolean, library: Library, 
     playbooks,
     team,
     askPath,
+    otherChats,
     skills: skills.map((skill) => ({ name: skill.id, description: skill.description, path: paths.get(skill.id)! })),
     paseoTools,
     botTools: true,
@@ -84,12 +88,13 @@ async function paseoToolsOn(paseo: PaseoApi | null, provider: string): Promise<b
 }
 
 /** The system prompt for a new chat; `settings` supplies the bot's team and the names of the bots in its ask path. */
-export async function systemPrompt({ bot, local, message, askPath = [] }: { bot: Bot; local: boolean; message?: string; askPath?: AskPath }, library: Library, paseo: PaseoApi | null, settings?: BotSettingsValues | null) {
+export async function systemPrompt({ bot, local, message, askPath = [], otherChats = [] }: { bot: Bot; local: boolean; message?: string; askPath?: AskPath; otherChats?: readonly ChatRef[] }, library: Library, paseo: PaseoApi | null, settings?: BotSettingsValues | null) {
   const group = teamOf(bot.id, settings?.groups ?? []);
   const start: ChatStart = {
     ...(message !== undefined ? { message } : {}),
     ...(group && settings ? { team: { group, bots: settings.bots } } : {}),
     askPath: askPath.map((hop) => ({ ...hop, name: settings?.bots.find((other) => other.id === hop.botId)?.name ?? hop.botId })),
+    otherChats,
   };
   // Another host's config isn't readable from here; Paseo gives agents its tools by default.
   const context = await promptContext(bot, local, library, local ? await paseoToolsOn(paseo, bot.provider) : true, start);

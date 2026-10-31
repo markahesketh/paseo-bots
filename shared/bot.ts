@@ -1,7 +1,7 @@
 import { defineSettings } from "@getpaseo/plugin";
 import { z } from "zod";
 import { APPS_MCP_NAME, appsPrompt, type PromptApp } from "./apps";
-import { canAsk, chainPrompt, type NamedHop } from "./asks";
+import { canAsk, chainPrompt, otherChatsPrompt, type ChatRef, type NamedHop } from "./asks";
 import { botToolsPrompt, QUIET_TOOLS, supportsToolGrants, TOOLS_MCP_NAME } from "./bot-tools";
 import { PASEO_MCP_NAME, PASEO_TOOLS_PROMPT } from "./paseo-tools";
 import { renderPlaybooks } from "./playbooks";
@@ -452,6 +452,8 @@ export interface PromptContext {
   team?: string | null;
   /** In a chat another bot asked for, the chats that led to it, root first. */
   askPath?: readonly NamedHop[];
+  /** In a chat another bot asked for, the bot's other chats running as it starts, newest first. */
+  otherChats?: readonly ChatRef[];
   /** The bot's usable skills with the SKILL.md path the agent should read. Empty when the files aren't on the bot's host. */
   skills: { name: string; description: string; path: string }[];
   /** Whether the host gives this bot's provider Paseo's own tools. */
@@ -486,6 +488,7 @@ export function promptSections(bot: Bot, context: PromptContext): PromptSection[
   if (context.team) sections.push({ title: "Team", text: context.team });
   const askPath = context.askPath ?? [];
   if (askPath.length > 0) sections.push({ title: "Asked by another bot", text: chainPrompt(askPath) });
+  if (context.otherChats?.length) sections.push({ title: "Your other chats", text: otherChatsPrompt(context.otherChats) });
   if (context.memoryPath) {
     const body = context.memory.trim() ? `\n\nCurrent memory:\n${context.memory.trim()}` : "\n\nYour memory is empty so far.";
     sections.push({

@@ -73,6 +73,8 @@ async function describeChat(paseo: PaseoApi, chat: ChatState, who: string, chatI
 }
 
 const ASK_STATE = { running: "still working", permission: "waiting for approval", error: "stopped with an error", idle: "answered", closed: "was closed" } as const;
+/** How many of the asked bot's running chats its new chat hears about. */
+const OTHER_CHATS_MAX = 5;
 
 /** The chain that led to a chat; empty for a chat the user started. */
 async function askPathOf(host: BotsHost, chatId: string): Promise<AskPath> {
@@ -120,10 +122,13 @@ export const askBot = defineTool({
     if (!target) throw new Error(others.length ? `There's no other bot called "${wanted}". Ask one of: ${others.map((entry) => entry.name).join(", ")}.` : "There are no other bots to ask.");
     const path = await askPathOf(host, agentId);
     if (!mayTarget({ botId: bot.id, path }, target.id)) throw new Error(`${target.name} is already in this chain, so you can't ask it. Reply here instead; your reply goes back to it.`);
+    // The target's chats at work right now, so the new one can keep out of their way. A failed list only loses that hint.
+    const busy = await host.requirePaseo().agents.list({ filter: { labels: { [BOT_LABEL]: target.id }, statuses: ["running", "initializing"] }, sort: [{ key: "updated_at", direction: "desc" }], page: { limit: OTHER_CHATS_MAX } }).catch(() => null);
+    const otherChats = busy?.entries.map(({ agent }) => ({ id: agent.id, title: agent.title ?? "Untitled chat" })) ?? [];
     const newChat = newUuid();
     asks.expect(newChat, agentId);
     try {
-      await startChat(host, relay, target, { agentId: newChat, prompt: askPrompt(bot.name, message), title: `${bot.name}: ${foldText(message, 60)}`, labels: { [ASK_PATH_LABEL]: formatAskPath([...path, { botId: bot.id, chatId: agentId }]) } });
+      await startChat(host, relay, target, { agentId: newChat, prompt: askPrompt(bot.name, message), title: `${bot.name}: ${foldText(message, 60)}`, labels: { [ASK_PATH_LABEL]: formatAskPath([...path, { botId: bot.id, chatId: agentId }]) }, otherChats });
     } catch (error) {
       asks.forget(newChat);
       throw error;
