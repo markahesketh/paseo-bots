@@ -9,6 +9,8 @@ import type { Bot } from "./bot";
 export const ASK_PATH_LABEL = "paseo-bots.ask-path";
 /** A chat with this many ancestors can't ask further. */
 export const ASK_DEPTH_MAX = 4;
+/** Plugin-sent turns a chain takes in a row before replies in it pause, so two bots can't ping-pong forever; a team sets its own. */
+export const WAKE_CAP = 10;
 
 export interface AskHop {
   botId: string;
