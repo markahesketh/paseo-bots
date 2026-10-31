@@ -69,6 +69,7 @@ export function fakePaseo(chats: Record<string, FakeChat>, sent: Record<string, 
           if (chat?.down === "refresh") throw new Error("daemon away");
           return chat ? { agent: snapshot(id, chat) } : null;
         },
+        respondToPermission: async () => undefined,
         send: async (text: string) => {
           const chat = chats[id];
           if (!chat) throw new Error(`There's no chat ${id}.`);

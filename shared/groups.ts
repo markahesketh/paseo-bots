@@ -51,6 +51,7 @@ export interface TeamDraft {
   leadId: string | null;
   memberIds: string[];
   instructions: string;
+  wakeCap: number;
 }
 
 /** Creates (null id) or updates a team; its members leave any other team they were on. */

@@ -90,7 +90,7 @@ async function followUp(chatId: string, message: string, { bot, agentId, host, a
   const chat = await readChat(host.requirePaseo(), chatId);
   const path = parseAskPath(chat.labels[ASK_PATH_LABEL]);
   if (!mayFollowUp(agentId, path)) throw new Error("You can only follow up in chats ask_bot started for you.");
-  if (asks.paused(path[0]!.chatId)) throw new Error("Bots in this chain have woken each other too many times in a row, so automatic replies are paused until the user sends a message. Try later.");
+  if (await asks.paused(path[0]!)) throw new Error("Bots in this chain have woken each other too many times in a row, so automatic replies are paused until your user sends a message or approves a request. Try later.");
   const who = await nameOf(host, chat.labels);
   if (chat.state === "running") throw new Error(`${who} is still working in chat ${chatId}; its reply will arrive here.`);
   if (chat.state === "permission") throw new Error(`${who} is waiting for the user to approve something in chat ${chatId}. Tell the user, and follow up later.`);

@@ -10,6 +10,7 @@ import {
   presetFromBot,
   pushHistory,
   RESERVED_MCP_NAMES,
+  WakeCapSchema,
   type Bot,
   type BotAvatar,
   type BotDefaults,
@@ -19,6 +20,7 @@ import {
   type McpServerConfig,
   type TeamLogo,
 } from "./bot";
+import { WAKE_CAP } from "./asks";
 import { saveTeam, teamLogoOf, withoutBot } from "./groups";
 import { addMcpServers, forgetItem, mcpServerTested, setBotUses } from "./library";
 import { PALETTE_COUNT } from "./pixel";
@@ -143,6 +145,7 @@ const CreateTeam = z.object({
   lead: Ref("Its Chief of Staff, the user's main contact who hands work to the others").optional(),
   members: z.array(Ref("A member")).max(50).optional().describe("The team's bots. A bot is on one team at a time; adding it moves it here."),
   instructions: z.string().max(20_000).optional().describe("Shared instructions added to every member's prompt."),
+  wake_cap: WakeCapSchema.optional().describe("How many times in a row bots in a chain started from a member's chat may wake each other with replies before they pause for the user (1 to 100, default 10)."),
   logo: LogoInput.optional(),
 });
 
@@ -154,6 +157,7 @@ const UpdateTeam = z.object({
   add_members: z.array(Ref("A bot")).max(50).optional(),
   remove_members: z.array(Ref("A bot")).max(50).optional(),
   instructions: z.string().max(20_000).optional().describe("Shared instructions; replaces the current ones."),
+  wake_cap: WakeCapSchema.optional().describe("The wake limit for chains started from a member's chat (1 to 100); replaces the current one."),
   logo: LogoInput.optional(),
 });
 
@@ -530,7 +534,7 @@ function applyChange(values: BotSettingsValues, change: Change, context: ApplyCo
       const lead = change.lead ? findBot(values, change.lead) : null;
       const members = [...new Set([...(lead ? [lead.id] : []), ...(change.members ?? []).map((ref) => findBot(values, ref).id)])];
       const logo = withLogo({ seed: randomSeed(), palette: null, imageUrl: null }, change.logo);
-      const draft = { name: oneLine(change.name), logo, leadId: lead?.id ?? null, memberIds: members, instructions: change.instructions?.trim() ?? "" };
+      const draft = { name: oneLine(change.name), logo, leadId: lead?.id ?? null, memberIds: members, instructions: change.instructions?.trim() ?? "", wakeCap: change.wake_cap ?? WAKE_CAP };
       return { ...values, groups: saveTeam(groups, null, draft, newGroupId(), context.now) };
     }
     case "update_team": {
@@ -544,6 +548,7 @@ function applyChange(values: BotSettingsValues, change: Change, context: ApplyCo
         leadId: lead && members.includes(lead) ? lead : null,
         memberIds: members,
         instructions: change.instructions?.trim() ?? group.instructions,
+        wakeCap: change.wake_cap ?? group.wakeCap,
       };
       return { ...values, groups: saveTeam(groups, group.id, draft, group.id, context.now) };
     }
@@ -717,6 +722,7 @@ export function describeChange(change: Change): string {
         ...(change.lead ? [`led by ${change.lead}`] : []),
         ...(members.length ? [`with ${list(members)}`] : []),
         ...(change.instructions?.trim() ? ["shared instructions"] : []),
+        ...(change.wake_cap !== undefined ? [`wake limit ${change.wake_cap}`] : []),
       ];
       return `**New team ${oneLine(change.name)}**${parts.length ? `: ${parts.join("; ")}` : ""}`;
     }
@@ -727,6 +733,7 @@ export function describeChange(change: Change): string {
         ...(change.add_members?.length ? [`adds ${list(change.add_members)}`] : []),
         ...(change.remove_members?.length ? [`removes ${list(change.remove_members)}`] : []),
         ...(change.instructions !== undefined ? ["new shared instructions"] : []),
+        ...(change.wake_cap !== undefined ? [`wake limit ${change.wake_cap}`] : []),
         ...(change.logo ? ["a new logo"] : []),
       ];
       return `**Team ${change.team}**: ${parts.join("; ") || "no changes"}`;
@@ -802,7 +809,7 @@ export function setupOverview(values: BotSettingsValues, providers: readonly Pro
       groups
         .map((group) => {
           const members = teamMembers(group).filter((id) => id !== group.leadId).map((id) => byId.get(id) ?? id);
-          return `- ${group.name} (id ${group.id}): Chief of Staff ${group.leadId ? (byId.get(group.leadId) ?? group.leadId) : "none"}; members ${list(members) || "none"}${group.instructions.trim() ? "; has shared instructions" : ""}.`;
+          return `- ${group.name} (id ${group.id}): Chief of Staff ${group.leadId ? (byId.get(group.leadId) ?? group.leadId) : "none"}; members ${list(members) || "none"}; wake limit ${group.wakeCap}${group.instructions.trim() ? "; has shared instructions" : ""}.`;
         })
         .join("\n") || "- none"
     }`,

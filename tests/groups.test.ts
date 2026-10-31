@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { promptSections, type BotGroup } from "../shared/bot";
+import { BotGroupSchema, promptSections, TeamFileTeamSchema, type BotGroup } from "../shared/bot";
 import { groupBots, OTHER_BOTS_TAB, saveTeam, tabOf, teamLogoOf, teamOf, teamPrompt, teamTabs, withoutBot } from "../shared/groups";
 import { LOGO_SIZE, MOTIF_NAMES, teamLogo, type TeamLogoImage } from "../shared/team-logo";
 import { makeBot } from "./helpers";
 
 const NOW = "2026-09-27T00:00:00.000Z";
-const team = (patch: Partial<BotGroup> = {}): BotGroup => ({ id: "t1", name: "Ops", logo: null, leadId: "chief", memberIds: ["chief", "scout", "inbox"], instructions: "", createdAt: NOW, updatedAt: NOW, ...patch });
+const team = (patch: Partial<BotGroup> = {}): BotGroup => ({ id: "t1", name: "Ops", logo: null, leadId: "chief", memberIds: ["chief", "scout", "inbox"], instructions: "", wakeCap: 10, createdAt: NOW, updatedAt: NOW, ...patch });
 const bots = [makeBot({ id: "chief", name: "Chief", title: "Runs the house" }), makeBot({ id: "scout", name: "Scout", title: "Researcher" }), makeBot({ id: "inbox", name: "Inbox", archived: true }), makeBot({ id: "solo", name: "Solo" })];
 
 describe("teams", () => {
@@ -31,14 +31,21 @@ describe("teams", () => {
 
   it("keeps a bot on one team and drops leads that aren't members", () => {
     const other = team({ id: "t2", name: "Home", leadId: "solo", memberIds: ["solo"] });
-    const moved = saveTeam([team(), other], null, { name: "New", logo: null, leadId: "scout", memberIds: ["scout", "solo"], instructions: "" }, "t3", NOW);
+    const moved = saveTeam([team(), other], null, { name: "New", logo: null, leadId: "scout", memberIds: ["scout", "solo"], instructions: "", wakeCap: 10 }, "t3", NOW);
     expect(moved.map((group) => [group.id, group.leadId, group.memberIds])).toEqual([
       ["t1", "chief", ["chief", "inbox"]],
       ["t2", null, []],
       ["t3", "scout", ["scout", "solo"]],
     ]);
-    expect(saveTeam([team()], "t1", { name: "Ops", logo: null, leadId: "ghost", memberIds: ["chief"], instructions: "" }, "x", NOW)[0]!.leadId).toBeNull();
+    expect(saveTeam([team()], "t1", { name: "Ops", logo: null, leadId: "ghost", memberIds: ["chief"], instructions: "", wakeCap: 10 }, "x", NOW)[0]!.leadId).toBeNull();
     expect(withoutBot([team()], "chief", NOW)[0]).toMatchObject({ leadId: null, memberIds: ["scout", "inbox"] });
+  });
+
+  it("gives teams saved before the wake cap the default, and keeps it within 1 to 100", () => {
+    expect(BotGroupSchema.parse({ id: "t1", name: "Ops", createdAt: NOW, updatedAt: NOW }).wakeCap).toBe(10);
+    expect(TeamFileTeamSchema.parse({ name: "Ops" }).wakeCap).toBe(10);
+    expect(BotGroupSchema.safeParse({ ...team(), wakeCap: 0 }).success).toBe(false);
+    expect(BotGroupSchema.safeParse({ ...team(), wakeCap: 101 }).success).toBe(false);
   });
 });
 
