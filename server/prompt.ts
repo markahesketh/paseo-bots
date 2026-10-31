@@ -34,9 +34,7 @@ export interface ChatStart {
   message?: string;
   /** The bot's team and every bot, when it's on one. */
   team?: { group: BotGroup; bots: Bot[] };
-  /** The chats that led to this one when another bot asked for it. */
   askPath?: readonly NamedHop[];
-  /** The bot's other chats running as this one starts, when another bot asked for it. */
   otherChats?: readonly ChatRef[];
 }
 
@@ -87,7 +85,6 @@ async function paseoToolsOn(paseo: PaseoApi | null, provider: string): Promise<b
   }
 }
 
-/** The system prompt for a new chat; `settings` supplies the bot's team and the names of the bots in its ask path. */
 export async function systemPrompt({ bot, local, message, askPath = [], otherChats = [] }: { bot: Bot; local: boolean; message?: string; askPath?: AskPath; otherChats?: readonly ChatRef[] }, library: Library, paseo: PaseoApi | null, settings?: BotSettingsValues | null) {
   const group = teamOf(bot.id, settings?.groups ?? []);
   const start: ChatStart = {

@@ -23,7 +23,6 @@ describe("asking other bots", () => {
     const host = fakeHost([scout, makeBot({ id: "bot-inbox", name: "Inbox" }), makeBot({ id: "bot-old", name: "Old", archived: true })]);
     const chats: Record<string, FakeChat> = {
       "caller-chat": { status: "running", labels: { "paseo-bots.bot": "bot-scout" } },
-      // Inbox's chats at work now, which its new chat hears about, newest first; a finished one isn't mentioned.
       "inbox-old": { status: "running", title: "Archive", labels: { "paseo-bots.bot": "bot-inbox" }, updatedAt: "2026-09-27T01:00:00.000Z" },
       "inbox-new": { status: "initializing", labels: { "paseo-bots.bot": "bot-inbox" }, updatedAt: "2026-09-27T02:00:00.000Z" },
       "inbox-done": { status: "idle", title: "Done", labels: { "paseo-bots.bot": "bot-inbox" } },
@@ -49,7 +48,6 @@ describe("asking other bots", () => {
     chats[chatId] = { status: "running", labels: { "paseo-bots.bot": "bot-inbox", [ASK_PATH_LABEL]: "bot-scout@caller-chat" } };
     await expect(askBot.run({ bot: "Old", message: "x" }, caller)).rejects.toThrow('There\'s no other bot called "Old". Ask one of: Inbox.');
 
-    // Inbox, asked by Scout, can ask a third bot but not Scout, and its chat's path grows by one hop.
     const inbox = (await host.bot("bot-inbox"))!;
     const asked = { ...caller, bot: inbox, agentId: chatId };
     await expect(askBot.run({ bot: "Scout", message: "x" }, asked)).rejects.toThrow("Scout is already in this chain");
@@ -58,7 +56,6 @@ describe("asking other bots", () => {
     expect(await askBot.run({ bot: "Pay", message: "Pay it" }, { ...asked, host: host3 })).toContain("Asked Pay in chat ");
     expect(started.at(-1)!.labels).toEqual({ [ASK_PATH_LABEL]: `bot-scout@caller-chat,bot-inbox@${chatId}` });
 
-    // Four hops in, a chat has no ask_bot; "off" hides it everywhere.
     chats.deep = { status: "running", labels: { "paseo-bots.bot": "bot-scout", [ASK_PATH_LABEL]: "a@1,b@2,c@3,d@4" } };
     chats.third = { status: "running", labels: { "paseo-bots.bot": "bot-scout", [ASK_PATH_LABEL]: "a@1,b@2,c@3" } };
     expect(await askBot.available!({ ...caller, agentId: "deep" })).toBe(false);

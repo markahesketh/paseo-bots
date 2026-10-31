@@ -181,7 +181,6 @@ describe("memory journal, daily log and search_chats", () => {
       ["routine-1", agent.id, { kind: "canceled", reason: "stopped" }, "Sent the three Q3 invoices to Acme."],
       ["routine-1", "unreadable", { kind: "completed" }, ""],
     ]);
-    // The reply goes out even when recording the run failed, and not at all when the turn couldn't be read.
     expect(delivered).toEqual([
       [agent.id, { kind: "completed" }, "Sent the three Q3 invoices to Acme."],
       [agent.id, { kind: "canceled", reason: "stopped" }, "Sent the three Q3 invoices to Acme."],
