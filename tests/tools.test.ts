@@ -74,8 +74,9 @@ describe("the bots MCP server", () => {
   it("serves the MCP handshake, lists its tools and runs them for one chat", async () => {
     const { Relay } = await import("../server/relay");
     const { BOT_TOOLS } = await import("../server/tools");
+    const { Asks } = await import("../server/asks");
     const host = fakeHost([makeBot({ id: "bot-a", name: "Scout", title: "Researcher" }), makeBot({ id: "bot-b", name: "Inbox", description: "Email triage" }), makeBot({ id: "bot-c", archived: true })]);
-    const relay = new Relay(host, BOT_TOOLS);
+    const relay = new Relay(host, BOT_TOOLS, new Asks(host));
     try {
       const agentId = newUuid();
       const mount = (await relay.mountTools("bot-a", agentId)) as { url: string; headers: Record<string, string> };
@@ -109,7 +110,7 @@ describe("the bots MCP server", () => {
     const { acceptProposal, dismissProposal, getProposal } = await import("../server/proposals");
     const { librarySkillPath } = await import("../server/library");
     const host = fakeHost([makeBot({ id: "bot-a" })]);
-    const caller = { bot: makeBot({ id: "bot-a" }), agentId: newUuid(), host, relay: null as never };
+    const caller = { bot: makeBot({ id: "bot-a" }), agentId: newUuid(), host, relay: null as never, asks: null as never };
     const reply = await proposeSkill.run({ name: "Weekly Report!", description: "Use for the\nweekly report", instructions: "1. Collect PRs." }, caller);
     const id = proposalIdOf({ name: "bots.propose_skill", status: "completed", detail: { output: reply } })!;
     expect(id).toMatch(/^p-[a-z0-9]{10}$/);

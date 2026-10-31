@@ -3,8 +3,9 @@ import { Modal, useToast } from "@getpaseo/plugin/client/react-native";
 import { SettingsAction, SettingsCard, SettingsRow, SettingsSection, SettingsSelect, SettingsSwitch } from "@getpaseo/plugin/client/ui";
 import { useState } from "react";
 import { View } from "react-native";
+import { WAKE_CAP } from "../../shared/asks";
 import { randomSeed } from "../../shared/avatar";
-import type { Bot, BotGroup, TeamLogo as Logo } from "../../shared/bot";
+import { WakeCapSchema, type Bot, type BotGroup, type TeamLogo as Logo } from "../../shared/bot";
 import { teamLogoOf, teamOf, type TeamDraft } from "../../shared/groups";
 import { TeamLogo } from "../Avatar";
 import { errorText, nativeTokens } from "../native";
@@ -43,6 +44,8 @@ export function TeamSheet({
   const [memberIds, setMemberIds] = useState<string[]>(group ? [...new Set([...(group.leadId ? [group.leadId] : []), ...group.memberIds])] : []);
   const [leadId, setLeadId] = useState<string | null>(group?.leadId ?? null);
   const [instructions, setInstructions] = useState(group?.instructions ?? "");
+  const [wakeCap, setWakeCap] = useState(group?.wakeCap ?? WAKE_CAP);
+  const wakeCapOk = WakeCapSchema.safeParse(wakeCap).success;
   const live = bots.filter((bot) => !bot.archived);
   const members = live.filter((bot) => memberIds.includes(bot.id));
   const lead = leadId && memberIds.includes(leadId) ? leadId : null;
@@ -108,14 +111,19 @@ export function TeamSheet({
             <TextAreaField colors={colors} accessibilityLabel="Shared instructions" value={instructions} onChangeText={setInstructions} minHeight={160} placeholder="We handle the family's paperwork. Keep anything with an account number out of replies." />
           </SettingsCard>
         </SettingsSection>
+        <SettingsSection title="Automatic replies" info="Bots a member asks wake each other with their replies. After this many in a row they pause until you send a message or approve a request in the chain.">
+          <SettingsCard>
+            <InputField colors={colors} label="Replies in a row" hint="1 to 100" error={wakeCapOk ? null : "A whole number from 1 to 100"} initialValue={String(wakeCap)} keyboardType="number-pad" onChangeText={(text) => setWakeCap(Number(text.trim()))} />
+          </SettingsCard>
+        </SettingsSection>
         <SheetActions leading={onDelete ? <Button colors={colors} variant="ghost" label="Delete team" icon="Trash2" onPress={onDelete} /> : null}>
           <Button colors={colors} variant="ghost" label="Cancel" onPress={onClose} />
           <Button
             colors={colors}
             variant="default"
             label={group ? "Save" : "Create team"}
-            disabled={!name.trim()}
-            onPress={() => onSave({ name: name.trim().slice(0, 60), logo, leadId: lead, memberIds: members.map((bot) => bot.id), instructions })}
+            disabled={!name.trim() || !wakeCapOk}
+            onPress={() => onSave({ name: name.trim().slice(0, 60), logo, leadId: lead, memberIds: members.map((bot) => bot.id), instructions, wakeCap })}
           />
         </SheetActions>
       </Modal.Content>

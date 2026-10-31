@@ -8,7 +8,7 @@ const PROVIDERS: ProviderInfo[] = [
   { id: "codex", models: [{ id: "gpt", label: "GPT", isDefault: true, thinking: [] }], modes: [{ id: "auto", label: "Auto" }], defaultModeId: "auto" },
 ];
 const context: ApplyContext = { now: NOW, provider: "claude", providers: PROVIDERS };
-const team = (patch: Partial<BotGroup> = {}): BotGroup => ({ id: "t1", name: "Ops", logo: null, leadId: "chief", memberIds: ["chief", "scout"], instructions: "", createdAt: NOW, updatedAt: NOW, ...patch });
+const team = (patch: Partial<BotGroup> = {}): BotGroup => ({ id: "t1", name: "Ops", logo: null, leadId: "chief", memberIds: ["chief", "scout"], instructions: "", wakeCap: 10, createdAt: NOW, updatedAt: NOW, ...patch });
 
 function setup(patch: Partial<BotSettingsValues> = {}): BotSettingsValues {
   return {
@@ -33,7 +33,7 @@ describe("setup changes", () => {
     const next = apply([
       { type: "create_bot", name: "Juno", role: "ops", title: "Producer", skills: ["weekly-report"], apps: [{ app: "Gmail", tools: "read" }], playbooks: [{ name: "Standup", triggers: ["standup"], instructions: "Collect updates." }] },
       { type: "create_bot", name: "Mika", instructions: "Draw sprites." },
-      { type: "create_team", name: "Studio", lead: "Juno", members: ["Mika", "solo"], instructions: "Ship on Fridays." },
+      { type: "create_team", name: "Studio", lead: "Juno", members: ["Mika", "solo"], instructions: "Ship on Fridays.", wake_cap: 20 },
     ]);
     const juno = next.bots.find((bot) => bot.name === "Juno")!;
     expect(juno).toMatchObject({ title: "Producer", provider: "claude", skillIds: ["weekly-report"], apps: ["gmail"], appRules: { gmail: { tools: "read", account: null } }, contactBots: "ask" });
@@ -45,6 +45,7 @@ describe("setup changes", () => {
     expect(studio.memberIds).toEqual([juno.id, next.bots.find((bot) => bot.name === "Mika")!.id, "solo"]);
     expect(studio.logo?.seed).toBeTruthy();
     expect(studio.instructions).toBe("Ship on Fridays.");
+    expect(studio.wakeCap).toBe(20);
   });
 
   it("edits a bot, resets what belonged to its old provider and keeps the edit undoable", () => {
@@ -80,12 +81,12 @@ describe("setup changes", () => {
 
   it("updates and deletes teams, routines and bots", () => {
     const next = apply([
-      { type: "update_team", team: "Ops", lead: "Scout", add_members: ["Solo"], remove_members: ["Chief"], logo: { colour: 3 } },
+      { type: "update_team", team: "Ops", lead: "Scout", add_members: ["Solo"], remove_members: ["Chief"], logo: { colour: 3 }, wake_cap: 3 },
       { type: "add_routine", bot: "Solo", name: "Digest", instructions: "Sum up the day.", schedule: { type: "daily", time: "18:00", weekdays: [1, 2, 3, 4, 5] } },
       { type: "update_routine", bot: "Solo", routine: "digest", enabled: false },
       { type: "delete_bot", bot: "Chief" },
     ]);
-    expect(next.groups![0]).toMatchObject({ leadId: "scout", memberIds: ["scout", "solo"], logo: { seed: "t1", palette: 3, imageUrl: null } });
+    expect(next.groups![0]).toMatchObject({ leadId: "scout", memberIds: ["scout", "solo"], logo: { seed: "t1", palette: 3, imageUrl: null }, wakeCap: 3 });
     expect(next.bots.map((bot) => bot.id)).toEqual(["scout", "solo"]);
     expect(next.bots[1]!.routines[0]).toMatchObject({ name: "Digest", enabled: false, schedule: { kind: "daily", time: "18:00", weekdays: [1, 2, 3, 4, 5] } });
     expect(apply([{ type: "delete_team", team: "t1" }]).groups).toEqual([]);
@@ -114,13 +115,13 @@ describe("setup changes", () => {
 
   it("describes changes plainly and flags more access", () => {
     const changes = ChangesSchema.parse([
-      { type: "create_team", name: "Studio", lead: "Juno", members: ["Juno", "Mika"] },
+      { type: "create_team", name: "Studio", lead: "Juno", members: ["Juno", "Mika"], wake_cap: 20 },
       { type: "update_bot", bot: "Scout", mode: "plan", allow_tools: ["github/search"], add_apps: [{ app: "gmail", tools: "read" }] },
       { type: "add_mcp_server", name: "files", command: "npx", args: ["files-mcp"] },
       { type: "delete_bot", bot: "Chief" },
     ]);
     expect(changes.map(describeChange)).toEqual([
-      "**New team Studio**: led by Juno; with Mika",
+      "**New team Studio**: led by Juno; with Mika; wake limit 20",
       "**Scout**: approval mode plan; may use gmail (read-only tools); uses github/search without asking",
       "**New MCP server files**: runs `npx files-mcp`; off until it passes a test in Skills & Tools",
       "**Delete bot Chief**; its chats stay in Paseo's history",

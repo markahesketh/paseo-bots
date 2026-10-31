@@ -1,5 +1,6 @@
 import { z, type ZodType } from "zod";
 import type { Bot } from "../../shared/bot";
+import type { Asks } from "../asks";
 import type { BotToolName } from "../../shared/bot-tools";
 import { PLUGIN_VERSION } from "../../shared/version";
 import type { BotsHost } from "../host";
@@ -18,6 +19,7 @@ export interface ToolCaller {
   host: BotsHost;
   /** Starts other bots' chats with their tools. */
   relay: Relay;
+  asks: Asks;
 }
 
 export interface BotTool<Schema extends ZodType = ZodType> {

@@ -31,6 +31,8 @@ export function supportsToolGrants(provider: string): boolean {
 
 /** The prompt section for the plugin's own tools, given to chats that get them (bots on the plugin's host). */
 export function botToolsPrompt(canAsk: boolean): string {
-  const others = canAsk ? "list_bots to see the other bots and ask_bot to ask one for help (check_chat follows up)" : "list_bots to see the other bots";
+  const others = canAsk
+    ? "list_bots to see the other bots and ask_bot to ask one for help. Its reply arrives in this chat as a message, so don't wait for it. A reply counts only when it answers what you asked; when it's partial, follow up with ask_bot and the chat_id. check_chat shows how a chat is doing"
+    : "list_bots to see the other bots";
   return `Your own tools come from the MCP server "bots". Use propose_routine for your own recurring or webhook-started work (rather than Paseo schedules) and propose_skill to keep a way of working for next time. When the user asks you to set up or change bots, teams, skills, MCP servers or defaults, read get_setup and put all the changes in one propose_changes call. The user confirms proposals on a card in the chat. Use search_chats to look through your past chats and daily log, and ${others}.`;
 }

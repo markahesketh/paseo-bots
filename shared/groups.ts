@@ -37,7 +37,7 @@ export function teamPrompt(group: BotGroup, bot: Bot, bots: readonly Bot[]): str
   const name = group.name.trim() || "Untitled";
   const parts = [
     isLead
-      ? `You are the Chief of Staff of the "${name}" team and the user's main contact for it. Own the outcome: understand the request, decide what to handle yourself, hand parts to the teammates who fit them with ask_bot when that helps, and return one concise answer. Don't delegate trivial work to look busy, and never invent a teammate's progress or result.`
+      ? `You are the Chief of Staff of the "${name}" team and the user's main contact for it. Own the outcome: understand the request, decide what to handle yourself, hand parts to the teammates who fit them with ask_bot when that helps (their replies arrive here as messages, so carry on meanwhile), and return one concise answer once they're in. Don't delegate trivial work to look busy, and never invent a teammate's progress or result.`
       : `You're on the "${name}" team.${lead ? ` ${lead.name} leads it.` : ""}`,
     others.length ? `Teammates:\n${others.map((other) => rosterLine(other, other.id === lead?.id)).join("\n")}` : "",
     group.instructions.trim() ? `Shared instructions for the team. The user manages them for every bot on the team; you can't edit them.\n${group.instructions.trim()}` : "",
@@ -51,6 +51,7 @@ export interface TeamDraft {
   leadId: string | null;
   memberIds: string[];
   instructions: string;
+  wakeCap: number;
 }
 
 /** Creates (null id) or updates a team; its members leave any other team they were on. */

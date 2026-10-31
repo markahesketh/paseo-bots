@@ -1,6 +1,7 @@
 import { defineSettings } from "@getpaseo/plugin";
 import { z } from "zod";
 import { APPS_MCP_NAME, appsPrompt, type PromptApp } from "./apps";
+import { canAsk, chainPrompt, otherChatsPrompt, WAKE_CAP, type ChatRef, type NamedHop } from "./asks";
 import { botToolsPrompt, QUIET_TOOLS, supportsToolGrants, TOOLS_MCP_NAME } from "./bot-tools";
 import { PASEO_MCP_NAME, PASEO_TOOLS_PROMPT } from "./paseo-tools";
 import { renderPlaybooks } from "./playbooks";
@@ -226,6 +227,8 @@ const TeamLogoSchema = z.object({
 });
 export type TeamLogo = z.infer<typeof TeamLogoSchema>;
 
+export const WakeCapSchema = z.number().int().min(1).max(100);
+
 /** A team of bots, after OpenMausBot's teams: its members, its lead (Chief of Staff) and shared instructions. */
 export const BotGroupSchema = z.object({
   id: z.string(),
@@ -238,6 +241,7 @@ export const BotGroupSchema = z.object({
   memberIds: z.array(z.string()).default([]),
   /** Added to every member's prompt; only the user edits them. */
   instructions: z.string().default(""),
+  wakeCap: WakeCapSchema.default(WAKE_CAP),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -250,6 +254,7 @@ export const TeamFileTeamSchema = z.object({
   lead: z.number().int().min(0).nullable().default(null),
   members: z.array(z.number().int().min(0)).max(50).default([]),
   instructions: z.string().max(20_000).default(""),
+  wakeCap: WakeCapSchema.default(WAKE_CAP),
 });
 export type TeamFileTeam = z.infer<typeof TeamFileTeamSchema>;
 
@@ -449,6 +454,8 @@ export interface PromptContext {
   playbooks: Playbook[];
   /** In a team's chat, the lead's view of the team (teamPrompt). */
   team?: string | null;
+  askPath?: readonly NamedHop[];
+  otherChats?: readonly ChatRef[];
   /** The bot's usable skills with the SKILL.md path the agent should read. Empty when the files aren't on the bot's host. */
   skills: { name: string; description: string; path: string }[];
   /** Whether the host gives this bot's provider Paseo's own tools. */
@@ -481,6 +488,9 @@ export function promptSections(bot: Bot, context: PromptContext): PromptSection[
     });
   }
   if (context.team) sections.push({ title: "Team", text: context.team });
+  const askPath = context.askPath ?? [];
+  if (askPath.length > 0) sections.push({ title: "Asked by another bot", text: chainPrompt(askPath) });
+  if (context.otherChats?.length) sections.push({ title: "Your other chats", text: otherChatsPrompt(context.otherChats) });
   if (context.memoryPath) {
     const body = context.memory.trim() ? `\n\nCurrent memory:\n${context.memory.trim()}` : "\n\nYour memory is empty so far.";
     sections.push({
@@ -503,7 +513,7 @@ export function promptSections(bot: Bot, context: PromptContext): PromptSection[
   }
   if (context.playbooks.length > 0) sections.push({ title: "Playbooks", text: renderPlaybooks(context.playbooks) });
   if (context.apps.length > 0) sections.push({ title: "Connected apps", text: appsPrompt(context.apps) });
-  if (context.botTools) sections.push({ title: "Bot tools", text: botToolsPrompt(bot.contactBots !== "off") });
+  if (context.botTools) sections.push({ title: "Bot tools", text: botToolsPrompt(canAsk(bot, askPath)) });
   if (context.paseoTools) sections.push({ title: "Paseo tools", text: PASEO_TOOLS_PROMPT });
   return sections;
 }

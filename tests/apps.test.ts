@@ -295,7 +295,9 @@ describe("Composio client and relay", () => {
 
   it("relays a bot's MCP traffic with the key added, and refuses what it may not do", async () => {
     const { Relay } = await import("../server/relay");
-    const relay = new Relay(fakeHost([makeBot({ id: "bot-1", apps: ["gmail"] }), makeBot({ id: "bot-2", apps: [] })]), []);
+    const { Asks } = await import("../server/asks");
+    const host = fakeHost([makeBot({ id: "bot-1", apps: ["gmail"] }), makeBot({ id: "bot-2", apps: [] })]);
+    const relay = new Relay(host, [], new Asks(host));
     try {
       const mount = await relay.mountApps("bot-1");
       expect(mount?.type).toBe("http");
@@ -329,7 +331,9 @@ describe("Composio client and relay", () => {
     const composio = await import("../server/composio");
     await composio.accounts({ fresh: true });
     const { Relay } = await import("../server/relay");
-    const relay = new Relay(fakeHost([makeBot({ id: "bot-1", apps: ["gmail"] })]), []);
+    const { Asks } = await import("../server/asks");
+    const host = fakeHost([makeBot({ id: "bot-1", apps: ["gmail"] })]);
+    const relay = new Relay(host, [], new Asks(host));
     try {
       const mount = (await relay.mountApps("bot-1")) as { url: string; headers: Record<string, string> };
       const response = await fetch(mount.url, {
@@ -353,7 +357,9 @@ describe("Composio client and relay", () => {
       { slug: "GMAIL_SEND_EMAIL", name: "Send email", readOnly: false },
     ]);
     const { Relay } = await import("../server/relay");
-    const relay = new Relay(fakeHost([makeBot({ id: "bot-1", apps: ["gmail"], appRules: { gmail: { tools: "read", account: "ca_1" } } })]), []);
+    const { Asks } = await import("../server/asks");
+    const host = fakeHost([makeBot({ id: "bot-1", apps: ["gmail"], appRules: { gmail: { tools: "read", account: "ca_1" } } })]);
+    const relay = new Relay(host, [], new Asks(host));
     try {
       const mount = (await relay.mountApps("bot-1")) as { url: string; headers: Record<string, string> };
       const run = async (tool_slug: string) => {
