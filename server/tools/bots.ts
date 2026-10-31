@@ -53,7 +53,7 @@ async function readChat(paseo: PaseoApi, chatId: string): Promise<ChatState> {
   };
 }
 
-async function describeChat(paseo: PaseoApi, chat: ChatState, who: string, chatId: string): Promise<string> {
+async function describeChat(paseo: PaseoApi, chat: ChatState, who: string, chatId: string, from: number): Promise<string> {
   switch (chat.state) {
     case "running":
       return `${who} is still working in chat ${chatId}.`;
@@ -62,8 +62,10 @@ async function describeChat(paseo: PaseoApi, chat: ChatState, who: string, chatI
     case "error":
       return `${who}'s chat ${chatId} stopped with an error: ${chat.error ?? "unknown error"}`;
     case "idle": {
-      const { reply } = await readLastTurn(paseo, chatId);
-      return reply.trim() ? `${who} answered (chat ${chatId}):\n\n${capReply(reply)}` : `${who} finished in chat ${chatId} without a reply.`;
+      const reply = (await readLastTurn(paseo, chatId)).reply.trim();
+      if (!reply) return `${who} finished in chat ${chatId} without a reply.`;
+      if (from >= reply.length) throw new Error(`The reply is ${reply.length} characters long, so from must be below that.`);
+      return `${who} answered (chat ${chatId})${from ? `, from character ${from} of ${reply.length}` : ""}:\n\n${capReply(reply, chatId, from)}`;
     }
     case "closed":
       return `${who}'s chat ${chatId} was closed.`;
@@ -135,17 +137,18 @@ export const checkChat = defineTool({
   description: "Check a chat in a chain you asked with ask_bot (or one of your own chats): whether it's still working, its latest answer, and how the bots it asked in turn are doing.",
   input: z.object({
     chat_id: z.string().min(1).max(100).describe("The chat id ask_bot or search_chats gave you."),
+    from: z.number().int().min(0).optional().describe("A character offset into the latest answer, to read on from where a cut answer stopped."),
   }),
-  async run({ chat_id }, { bot, agentId, host, asks }) {
+  async run({ chat_id, from = 0 }, { bot, agentId, host, asks }) {
     const chatId = chat_id.trim();
     const paseo = host.requirePaseo();
     const chat = await readChat(paseo, chatId);
     const owner = chat.labels[BOT_LABEL] ?? "";
     if (!mayRead(bot.id, { botId: owner, path: parseAskPath(chat.labels[ASK_PATH_LABEL]) })) throw new Error("You can only check your own chats and ones in a chain you asked.");
+    const who = owner === bot.id ? "You" : await nameOf(host, chat.labels);
+    const lines = [`"${chat.title}": ${await describeChat(paseo, chat, who, chatId, from)}`];
     // A reply read here isn't pushed into this chat as well.
     if (chat.state !== "running" && chat.state !== "permission") await asks.consume(chatId, agentId);
-    const who = owner === bot.id ? "You" : await nameOf(host, chat.labels);
-    const lines = [`"${chat.title}": ${await describeChat(paseo, chat, who, chatId)}`];
     const children = await Promise.all(
       asks.askedBy(chatId).map(async (child) => {
         const state = await readChat(paseo, child).catch(() => null);
