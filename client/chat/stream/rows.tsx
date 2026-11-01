@@ -5,6 +5,7 @@ import { Image, Pressable, Text, View } from "react-native";
 import type { ComposerAttachment } from "../../../shared/attachments";
 import { capMessageForRender, formatDuration, formatMessageTimestamp, utf8ByteLength } from "../../../shared/markdown";
 import { appSignIns } from "../../../shared/apps";
+import { parseBotMessages } from "../../../shared/bot-messages";
 import { proposalIdOf } from "../../../shared/proposals";
 import { buildToolCallPresentation, type TaskActivity, type TaskEntry, type ToolCallDetail, type ToolCallStatus } from "../../../shared/tools";
 import { AttachmentPill } from "../../AttachmentPill";
@@ -13,6 +14,7 @@ import { CONTENT_MAX_WIDTH, nativeTokens } from "../../native";
 import { canSpeak } from "../../speech";
 import { scrollIntoView } from "../../web";
 import { content, contentLine, ui } from "../../typography";
+import { BotMessageCard } from "./BotMessageCard";
 import { ToolCallDetailsContent } from "./details";
 import type { StreamRow, TurnFooterInfo } from "./model";
 import { PlanCard } from "./PlanCard";
@@ -34,7 +36,6 @@ export interface RowContext {
   compact: boolean;
   cwd?: string;
   attachmentsFor(row: Extract<StreamRow, { kind: "user" }>): ComposerAttachment[];
-  /** Opens another chat of the same bot (a routine run's own chat). */
   openChat?(agentId: string): void;
   agentId: string | null;
   /** Set for bots on this host. */
@@ -61,8 +62,11 @@ export function RowFrame({ gapBelow, highlight, children }: { gapBelow: number; 
 export function RowContent({ row, context, compactBottom }: { row: StreamRow; context: RowContext; compactBottom: boolean }) {
   const { colors } = context;
   switch (row.kind) {
-    case "user":
+    case "user": {
+      const messages = parseBotMessages(row.text);
+      if (messages) return <View style={{ gap: 8 }}>{messages.map((message, index) => <BotMessageCard key={index} colors={colors} message={message} onOpenChat={context.openChat} />)}</View>;
       return <UserMessage colors={colors} compact={context.compact} text={row.text} timestamp={row.timestamp} attachments={context.attachmentsFor(row)} />;
+    }
     case "assistant":
       return <AssistantMessage colors={colors} text={row.text} phase={row.phase} compactBottom={compactBottom} />;
     case "thought":

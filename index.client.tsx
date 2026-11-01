@@ -1,6 +1,7 @@
 import type { PluginClientContext } from "@getpaseo/plugin/client";
 import { z } from "zod";
 import { BotsSurface } from "./client/BotsSurface";
+import { BotMessageCard } from "./client/chat/stream/BotMessageCard";
 import { NativeConnectCard } from "./client/chat/stream/ConnectCard";
 import { ProposalCard } from "./client/chat/stream/ProposalCard";
 import { RoutineRunCard } from "./client/chat/stream/RoutineRunCard";
@@ -9,6 +10,7 @@ import { BotsSettings } from "./client/settings/BotsSettings";
 import { installTooltips } from "./client/ui/Tooltip";
 import { appSignIns } from "./shared/apps";
 import { BOT_LABEL } from "./shared/bot";
+import { BOT_MESSAGE_CARD, BotMessageSchema, parseBotMessages } from "./shared/bot-messages";
 import { proposalIdOf } from "./shared/proposals";
 import { APP_SIGN_IN_CARD, AppSignInSchema, helloRpc, ROUTINE_RUN_CARD, RoutineRunCardSchema } from "./shared/rpc";
 import { LEARN_COMMAND, learnPrompt } from "./shared/skills";
@@ -77,6 +79,19 @@ export default function contribute(client: PluginClientContext) {
     ...APP_SIGN_IN_CARD,
     schema: AppSignInSchema,
     Component: ({ item, agentId, timestamp, theme }) => <NativeConnectCard colors={theme.colors} signIn={item.data} since={timestamp.getTime()} agentId={agentId} />,
+  });
+  client.addTimelineTransformer({
+    id: "bot-messages",
+    query: { itemType: "user_message" },
+    transform({ item }) {
+      const messages = parseBotMessages(item.text);
+      return messages ? { items: messages.map((data) => ({ type: "plugin", ...BOT_MESSAGE_CARD, data })) } : undefined;
+    },
+  });
+  client.addTimelineRenderer({
+    ...BOT_MESSAGE_CARD,
+    schema: BotMessageSchema,
+    Component: ({ item, theme }) => <BotMessageCard colors={theme.colors} message={item.data} />,
   });
   // A routine's results chat opened in Paseo's view shows its run cards too (no navigation there).
   client.addTimelineRenderer({
