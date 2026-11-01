@@ -42,6 +42,7 @@ export interface FakeChat {
   pendingPermissions?: unknown[];
   updatedAt?: string;
   down?: "refresh" | "send";
+  agentMessageTurn?: string;
 }
 
 interface FakeListOptions {
@@ -80,7 +81,7 @@ export function fakePaseo(chats: Record<string, FakeChat>, sent: Record<string, 
         timeline: {
           refetch: async () => ({
             entries: [
-              { item: { type: "user_message", text: "question" } },
+              chats[id]?.agentMessageTurn ? { turnId: chats[id]!.agentMessageTurn, item: { type: "tool_call", name: "agent_message" } } : { item: { type: "user_message", text: "question" } },
               ...(chats[id]?.reply ? [{ item: { type: "assistant_message", text: chats[id]!.reply } }] : []),
             ],
           }),
