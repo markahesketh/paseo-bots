@@ -8,7 +8,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, BackHandler, type LayoutRectangle, Platform, Text, View } from "react-native";
 import { randomSeed } from "../shared/avatar";
-import { applyDefaults, DEFAULT_BOT_DEFAULTS, DEFAULT_BOT_LIST_UI, EMPTY_LIBRARY, newBotId, newGroupId, presetFromBot, pushHistory, type Bot, type BotGroup, type BotListUi, type Library } from "../shared/bot";
+import { applyDefaults, BOT_LABEL, DEFAULT_BOT_DEFAULTS, DEFAULT_BOT_LIST_UI, EMPTY_LIBRARY, newBotId, newGroupId, presetFromBot, pushHistory, type Bot, type BotGroup, type BotListUi, type Library } from "../shared/bot";
 import { saveTeam, tabOf, teamTabs, withoutBot } from "../shared/groups";
 import { addImportedBots } from "../shared/library";
 import { displayTitle, startBotChat, syncBotWorkspaceTitle } from "../shared/chat";
@@ -572,6 +572,7 @@ function BotsSurfaceContent({ theme, layout, host, navigation }: PluginSurfacePr
         onBotMenu={(anchor) => (anchor ? openBotMenu(selectedBot, anchor, "kebab") : openBotMenuFromPane(selectedBot))}
         onTogglePanel={() => setPanel({ open: !panel.open, section: panel.section })}
         onStarted={(chatId) => setSelection({ botId: selectedBot.id, chatId })}
+        onOpenChat={select}
       />
     ) : (
       <Splash colors={colors} />
@@ -741,9 +742,10 @@ interface SelectedChatProps {
   onBotMenu(anchor: LayoutRectangle | null): void;
   onTogglePanel(): void;
   onStarted(chatId: string): void;
+  onOpenChat(selection: Selection): void;
 }
 
-function SelectedChat({ colors, bot, library, selection, localHost, panelOpen, layout, keyboardOpen, typeVersion, onBack, onBotMenu, onTogglePanel, onStarted }: SelectedChatProps) {
+function SelectedChat({ colors, bot, library, selection, localHost, panelOpen, layout, keyboardOpen, typeVersion, onBack, onBotMenu, onTogglePanel, onStarted, onOpenChat }: SelectedChatProps) {
   const host = useBotHost(bot.hostId, localHost);
   const chat = useChat(host.api, selection.chatId);
   const ensureHome = useRpc(ensureBotHomeRpc);
@@ -775,6 +777,15 @@ function SelectedChat({ colors, bot, library, selection, localHost, panelOpen, l
     });
     await queryClient.invalidateQueries({ queryKey: ["paseo-bots", "chats", host.key, bot.id] });
     onStarted(id);
+  };
+
+  const openChatUnderItsBot = (chatId: string) => {
+    if (!host.api) return toast.error(`${host.label} is offline.`);
+    host.api.agents
+      .ref(chatId)
+      .refresh()
+      .then((snapshot) => onOpenChat({ botId: snapshot?.agent.labels?.[BOT_LABEL] ?? bot.id, chatId }))
+      .catch((error: unknown) => toast.error(`Couldn't open the chat: ${errorText(error)}`));
   };
 
   // Keep the bot's workspace named after the bot.
@@ -814,7 +825,7 @@ function SelectedChat({ colors, bot, library, selection, localHost, panelOpen, l
       onBotMenu={onBotMenu}
       onTogglePanel={onTogglePanel}
       onStart={start}
-      onOpenChat={onStarted}
+      onOpenChat={openChatUnderItsBot}
     />
   );
 }
