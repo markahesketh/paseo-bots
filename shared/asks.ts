@@ -54,7 +54,7 @@ function listNames(names: readonly string[]): string {
 export function chainPrompt(path: readonly NamedHop[]): string {
   const names = path.map((hop) => hop.name);
   const position = ["1st", "2nd", "3rd"][path.length] ?? `${path.length + 1}th`;
-  return `You're ${position} in ${names.join(" → ")} → you. You can't ask ${listNames(names)}. Your reply here goes back to ${names.at(-1)} automatically; make it the answer to its question.`;
+  return `You're ${position} in ${names.join(" → ")} → you. You can't ask ${listNames(names)}. Your reply here goes back to ${names.at(-1)} automatically; make it the answer to its question. If you ask other bots or start Paseo agents, nothing goes back until they've all finished. You're woken with their results, so end that turn with the real answer. Leave notifyOnFinish on when you use create_agent, or nothing wakes you when its agent finishes.`;
 }
 
 export interface ChatRef {

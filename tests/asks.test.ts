@@ -41,7 +41,7 @@ describe("ask paths", () => {
 
   it("tells an asked chat its place in the chain", () => {
     expect(chainPrompt([{ ...path[0]!, name: "Chief" }, { ...path[1]!, name: "Scout" }])).toBe(
-      "You're 3rd in Chief → Scout → you. You can't ask Chief or Scout. Your reply here goes back to Scout automatically; make it the answer to its question.",
+      "You're 3rd in Chief → Scout → you. You can't ask Chief or Scout. Your reply here goes back to Scout automatically; make it the answer to its question. If you ask other bots or start Paseo agents, nothing goes back until they've all finished. You're woken with their results, so end that turn with the real answer. Leave notifyOnFinish on when you use create_agent, or nothing wakes you when its agent finishes.",
     );
     expect(chainPrompt([{ ...path[0]!, name: "Chief" }])).toContain("You're 2nd in Chief → you. You can't ask Chief.");
   });
