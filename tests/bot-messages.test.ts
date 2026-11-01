@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { askMessage, closedMessage, parseBotMessages, pausedMessage, replyMessage, stoppedMessage, type BotMessage } from "../shared/bot-messages";
+import { askMessage, closedMessage, parseBotMessages, previewLine, pausedMessage, replyMessage, stoppedMessage, type BotMessage } from "../shared/bot-messages";
 
 const CHAT = "0b6f9a52-3c1e-4b7a-9d2f-6e8a1c4b5d70";
 
@@ -30,5 +30,12 @@ describe("parseBotMessages", () => {
   it("doesn't split a reply that quotes a header", () => {
     const body = "Bob said:\n\n[Reply from Bob (chat abc) to your ask.]\n\nand mid-line [Reply from Bob too.";
     expect(parseBotMessages(replyMessage("Alan", CHAT, body))).toEqual([{ kind: "reply", bot: "Alan", chatId: CHAT, body }]);
+  });
+});
+
+describe("previewLine", () => {
+  it("takes the first line of prose without its markdown", () => {
+    expect(previewLine("\n```sh\nnpm test\n```\n## **Done**: all `258` pass\nMore detail.")).toBe("Done: all 258 pass");
+    expect(previewLine("> - quoted item")).toBe("quoted item");
   });
 });

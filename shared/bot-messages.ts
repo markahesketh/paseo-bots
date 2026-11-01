@@ -35,6 +35,24 @@ export function closedMessage(chatId: string): string {
   return `[chat ${chatId} was closed before it answered.]`;
 }
 
+export function previewLine(body: string): string {
+  let fenced = false;
+  for (const raw of body.split("\n")) {
+    const line = raw.trim();
+    if (line.startsWith("```")) {
+      fenced = !fenced;
+      continue;
+    }
+    const text = line
+      .replace(/^(?:(?:#+|>+|[-*+]|\d+[.)])\s+)+/, "")
+      .replace(/(\*\*|__|`)/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!fenced && text) return text;
+  }
+  return "";
+}
+
 export const BOT_MESSAGE_CARD = { kind: "bot-message", version: 1 } as const;
 
 export const BotMessageSchema = z.discriminatedUnion("kind", [
