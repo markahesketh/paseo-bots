@@ -145,7 +145,7 @@ const CreateTeam = z.object({
   lead: Ref("Its Chief of Staff, the user's main contact who hands work to the others").optional(),
   members: z.array(Ref("A member")).max(50).optional().describe("The team's bots. A bot is on one team at a time; adding it moves it here."),
   instructions: z.string().max(20_000).optional().describe("Shared instructions added to every member's prompt."),
-  wake_cap: WakeCapSchema.optional().describe("How many times in a row bots in a chain started from a member's chat may wake each other with replies before they pause for the user (1 to 100, default 10)."),
+  wake_cap: WakeCapSchema.optional().describe("How many times in a row bots in a chain started from a member's chat may wake each other with replies before they pause for the user (1 to 1000, default 10)."),
   logo: LogoInput.optional(),
 });
 
@@ -157,7 +157,7 @@ const UpdateTeam = z.object({
   add_members: z.array(Ref("A bot")).max(50).optional(),
   remove_members: z.array(Ref("A bot")).max(50).optional(),
   instructions: z.string().max(20_000).optional().describe("Shared instructions; replaces the current ones."),
-  wake_cap: WakeCapSchema.optional().describe("The wake limit for chains started from a member's chat (1 to 100); replaces the current one."),
+  wake_cap: WakeCapSchema.optional().describe("The wake limit for chains started from a member's chat (1 to 1000); replaces the current one."),
   logo: LogoInput.optional(),
 });
 

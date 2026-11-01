@@ -41,11 +41,11 @@ describe("teams", () => {
     expect(withoutBot([team()], "chief", NOW)[0]).toMatchObject({ leadId: null, memberIds: ["scout", "inbox"] });
   });
 
-  it("gives teams saved before the wake cap the default, and keeps it within 1 to 100", () => {
+  it("gives teams saved before the wake cap the default, and keeps it within 1 to 1000", () => {
     expect(BotGroupSchema.parse({ id: "t1", name: "Ops", createdAt: NOW, updatedAt: NOW }).wakeCap).toBe(10);
     expect(TeamFileTeamSchema.parse({ name: "Ops" }).wakeCap).toBe(10);
     expect(BotGroupSchema.safeParse({ ...team(), wakeCap: 0 }).success).toBe(false);
-    expect(BotGroupSchema.safeParse({ ...team(), wakeCap: 101 }).success).toBe(false);
+    expect(BotGroupSchema.safeParse({ ...team(), wakeCap: 1001 }).success).toBe(false);
   });
 });
 

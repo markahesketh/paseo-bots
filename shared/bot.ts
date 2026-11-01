@@ -227,7 +227,7 @@ const TeamLogoSchema = z.object({
 });
 export type TeamLogo = z.infer<typeof TeamLogoSchema>;
 
-export const WakeCapSchema = z.number().int().min(1).max(100);
+export const WakeCapSchema = z.number().int().min(1).max(1000);
 
 /** A team of bots, after OpenMausBot's teams: its members, its lead (Chief of Staff) and shared instructions. */
 export const BotGroupSchema = z.object({
