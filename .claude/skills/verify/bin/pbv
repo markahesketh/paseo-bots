@@ -1,0 +1,157 @@
+#!/usr/bin/env bash
+# Drive paseo-bots on a throwaway Paseo daemon: its own PASEO_HOME, port, web UI and browser session.
+# Usage: pbv launch|doctor|env|open|act|browser|paseo|shot|cleanup|runs  (see ../SKILL.md)
+set -euo pipefail
+
+ROOT="${PBV_ROOT:-$HOME/.cache/paseo-bots-verify}"
+SOURCE_DEFAULT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
+LIVE_HOME="$HOME/.paseo"
+
+die() { echo "pbv: $*" >&2; exit 1; }
+
+# The run every command acts on: $PBV_RUN, else the last one launched.
+run_dir() {
+  local id="${PBV_RUN:-}"
+  if [[ -z "$id" ]]; then
+    [[ -L "$ROOT/current" ]] || die "no run launched; run 'pbv launch' first"
+    id="$(basename "$(readlink "$ROOT/current")")"
+  fi
+  [[ -f "$ROOT/runs/$id/run.env" ]] || die "unknown run '$id' (see 'pbv runs')"
+  echo "$ROOT/runs/$id"
+}
+
+load() {
+  RUN="$(run_dir)"
+  source "$RUN/run.env"
+  export PASEO_HOME AGENT_BROWSER_SESSION
+}
+
+free_port() {
+  local port
+  for port in $(seq 6800 6899); do
+    lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1 || { echo "$port"; return; }
+  done
+  die "no free port in 6800-6899"
+}
+
+plugin_field() { # plugin_field <python expression on p>
+  paseo plugin ls --json 2>/dev/null | python3 -c "
+import json,sys
+p=next((p for p in json.load(sys.stdin) if p['id']=='paseo-bots'),None)
+print('' if p is None else $1)"
+}
+
+cmd_launch() {
+  local source="${1:-$SOURCE_DEFAULT}"
+  source="$(cd "$source" && pwd)"
+  [[ -f "$source/paseo-plugin.json" ]] || die "$source is not a paseo-bots checkout"
+  local id port
+  id="$(date +%Y%m%d-%H%M%S)-$$"
+  port="$(free_port)"
+  RUN="$ROOT/runs/$id"
+  mkdir -p "$RUN/home" "$RUN/evidence"
+  cat >"$RUN/run.env" <<EOF
+RUN_ID=$id
+PASEO_HOME=$RUN/home
+PORT=$port
+URL=http://127.0.0.1:$port/
+SOURCE=$source
+REVISION=$(git -C "$source" rev-parse --short HEAD 2>/dev/null || echo unknown)
+AGENT_BROWSER_SESSION=pbv-$id
+EOF
+  ln -sfn "$RUN" "$ROOT/current"
+  load
+
+  paseo daemon config set daemon.listen "127.0.0.1:$PORT" >/dev/null
+  paseo daemon config set daemon.relay.enabled false >/dev/null
+  paseo daemon config set features.webUi.enabled true >/dev/null
+  paseo daemon config set pluginsEnabled true >/dev/null
+  paseo daemon start --timeout 120 >"$RUN/launch.log" 2>&1 || { cat "$RUN/launch.log"; die "daemon failed to start"; }
+  paseo plugin install "$SOURCE" >>"$RUN/launch.log" 2>&1 || { cat "$RUN/launch.log"; die "plugin install failed"; }
+
+  local status="" i
+  for i in $(seq 1 60); do
+    status="$(plugin_field "p['status']")"
+    [[ "$status" == running ]] && curl -fsS -o /dev/null "$URL" && break
+    sleep 1
+  done
+  [[ "$status" == running ]] || { paseo plugin logs paseo-bots >&2 || true; die "plugin status '$status', not running"; }
+  # The bot Model menu caches whatever the catalog returns first, so don't hand over a UI before Claude's models load.
+  local models=0
+  for i in $(seq 1 60); do
+    paseo provider models claude --json 2>/dev/null | grep -q '"claude-haiku' && { models=1; break; }
+    sleep 1
+  done
+  [[ "$models" == 1 ]] || echo "warning: Claude models not listed yet; bot chats may show only 'Default'" >&2
+  echo "ready: run $RUN_ID, $URL, source $SOURCE @ $REVISION"
+  echo "evidence: $RUN/evidence"
+}
+
+cmd_doctor() {
+  load
+  local ok=1 pid listen
+  check() { if eval "$2"; then echo "ok    $1"; else echo "FAIL  $1"; ok=0; fi; }
+  echo "run $RUN_ID  home $PASEO_HOME  url $URL"
+  check "home is not the live ~/.paseo" '[[ "$PASEO_HOME" != "$LIVE_HOME" ]]'
+  pid="$(python3 -c "import json;print(json.load(open('$PASEO_HOME/paseo.pid'))['pid'])" 2>/dev/null || true)"
+  check "daemon process $pid alive" '[[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null'
+  # The supervisor in paseo.pid forks the worker that actually listens.
+  listen="$(lsof -nP -iTCP:"$PORT" -sTCP:LISTEN -t 2>/dev/null | head -1 || true)"
+  check "port $PORT owned by this run's daemon" '[[ -n "$listen" && ( "$listen" == "$pid" || "$(ps -o ppid= -p "$listen" | tr -d " ")" == "$pid" ) ]]'
+  check "/api/health ok" 'curl -fsS "${URL}api/health" | grep -q "\"ok\""'
+  check "web UI served" 'curl -fsS -o /dev/null "$URL"'
+  check "paseo-bots running" '[[ "$(plugin_field "p[\"status\"]")" == running ]]'
+  check "paseo-bots loaded from $SOURCE" '[[ "$(plugin_field "p[\"path\"]")" == "$SOURCE" ]]'
+  check "source still at $REVISION" '[[ "$(git -C "$SOURCE" rev-parse --short HEAD 2>/dev/null || echo unknown)" == "$REVISION" ]]'
+  [[ "$ok" == 1 ]] || exit 1
+}
+
+# pbv act <role> <exact name> [click|fill|check] [text]: retries until the element renders (PBV_WAIT seconds, default 15).
+cmd_act() {
+  load
+  local role="${1:?usage: pbv act <role> <name> [action] [text]}" name="${2:?}" action="${3:-click}"
+  shift $(( $# < 3 ? $# : 3 ))
+  local deadline=$(( SECONDS + ${PBV_WAIT:-15} )) out
+  while :; do
+    out="$(agent-browser find role "$role" "$action" "$@" --name "$name" --exact 2>&1)" && { echo "$out"; return; }
+    (( SECONDS < deadline )) || { echo "$out" >&2; return 1; }
+    sleep 0.5
+  done
+}
+
+cmd_shot() { # pbv shot <name>: screenshot + accessibility snapshot into evidence/
+  load
+  local name="${1:?usage: pbv shot <name>}"
+  agent-browser screenshot "$RUN/evidence/$name.png" >/dev/null
+  agent-browser snapshot >"$RUN/evidence/$name.aria.txt"
+  echo "$RUN/evidence/$name.png"
+  echo "$RUN/evidence/$name.aria.txt"
+}
+
+cmd_cleanup() {
+  load
+  agent-browser close >/dev/null 2>&1 || true
+  paseo daemon stop >/dev/null 2>&1 || true
+  # Agents the run's daemon started carry its home in their command line; nothing else does.
+  local left
+  left="$(pgrep -f "$PASEO_HOME" || true)"
+  [[ -z "$left" ]] || { echo "stopping leftover processes of this run: $left"; kill $left 2>/dev/null || true; }
+  lsof -nP -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1 && echo "warning: port $PORT still in use" >&2
+  rm -rf "$PASEO_HOME"
+  [[ "$(readlink "$ROOT/current" 2>/dev/null)" == "$RUN" ]] && rm "$ROOT/current"
+  echo "cleaned run $RUN_ID; evidence kept in $RUN/evidence"
+}
+
+case "${1:-}" in
+  launch) shift; cmd_launch "$@" ;;
+  doctor) cmd_doctor ;;
+  env) load; cat "$RUN/run.env"; echo "EVIDENCE=$RUN/evidence" ;;
+  open) load; agent-browser open "$URL" ;;
+  browser) shift; load; agent-browser "$@" ;;
+  paseo) shift; load; paseo "$@" ;;
+  act) shift; cmd_act "$@" ;;
+  shot) shift; cmd_shot "$@" ;;
+  cleanup) cmd_cleanup ;;
+  runs) ls -1 "$ROOT/runs" 2>/dev/null || true ;;
+  *) sed -n 2,3p "$0" | sed 's/^# //'; exit 2 ;;
+esac
