@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Drive paseo-bots on a throwaway Paseo daemon: its own PASEO_HOME, port, web UI and browser session.
-# Usage: pbv launch|doctor|env|open|act|browser|paseo|shot|cleanup|runs  (see ../SKILL.md)
 set -euo pipefail
+
+USAGE="Drive paseo-bots on a throwaway Paseo daemon: its own PASEO_HOME, port, web UI and browser session.
+Usage: pbv launch|doctor|env|open|act|browser|paseo|shot|cleanup|runs  (see ../SKILL.md)"
 
 ROOT="${PBV_ROOT:-$HOME/.cache/paseo-bots-verify}"
 SOURCE_DEFAULT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
@@ -9,7 +10,6 @@ LIVE_HOME="$HOME/.paseo"
 
 die() { echo "pbv: $*" >&2; exit 1; }
 
-# The run every command acts on: $PBV_RUN, else the last one launched.
 run_dir() {
   local id="${PBV_RUN:-}"
   if [[ -z "$id" ]]; then
@@ -34,7 +34,7 @@ free_port() {
   die "no free port in 6800-6899"
 }
 
-plugin_field() { # plugin_field <python expression on p>
+plugin_field() {
   paseo plugin ls --json 2>/dev/null | python3 -c "
 import json,sys
 p=next((p for p in json.load(sys.stdin) if p['id']=='paseo-bots'),None)
@@ -76,7 +76,6 @@ EOF
     sleep 1
   done
   [[ "$status" == running ]] || { paseo plugin logs paseo-bots >&2 || true; die "plugin status '$status', not running"; }
-  # The bot Model menu caches whatever the catalog returns first, so don't hand over a UI before Claude's models load.
   local models=0
   for i in $(seq 1 60); do
     paseo provider models claude --json 2>/dev/null | grep -q '"claude-haiku' && { models=1; break; }
@@ -106,7 +105,6 @@ cmd_doctor() {
   [[ "$ok" == 1 ]] || exit 1
 }
 
-# pbv act <role> <exact name> [click|fill|check] [text]: retries until the element renders (PBV_WAIT seconds, default 15).
 cmd_act() {
   load
   local role="${1:?usage: pbv act <role> <name> [action] [text]}" name="${2:?}" action="${3:-click}"
@@ -119,7 +117,7 @@ cmd_act() {
   done
 }
 
-cmd_shot() { # pbv shot <name>: screenshot + accessibility snapshot into evidence/
+cmd_shot() {
   load
   local name="${1:?usage: pbv shot <name>}"
   agent-browser screenshot "$RUN/evidence/$name.png" >/dev/null
@@ -128,14 +126,20 @@ cmd_shot() { # pbv shot <name>: screenshot + accessibility snapshot into evidenc
   echo "$RUN/evidence/$name.aria.txt"
 }
 
+descendants() {
+  local child
+  for child in $(pgrep -P "$1" || true); do echo "$child"; descendants "$child"; done
+}
+
 cmd_cleanup() {
   load
   agent-browser close >/dev/null 2>&1 || true
+  local pid left
+  pid="$(python3 -c "import json;print(json.load(open('$PASEO_HOME/paseo.pid'))['pid'])" 2>/dev/null || true)"
+  left="$([[ -n "$pid" ]] && descendants "$pid" || true)"
   paseo daemon stop >/dev/null 2>&1 || true
-  # Agents the run's daemon started carry its home in their command line; nothing else does.
-  local left
-  left="$(pgrep -f "$PASEO_HOME" || true)"
-  [[ -z "$left" ]] || { echo "stopping leftover processes of this run: $left"; kill $left 2>/dev/null || true; }
+  left="$(for p in $left; do kill -0 "$p" 2>/dev/null && echo "$p"; done || true)"
+  [[ -z "$left" ]] || { echo "stopping leftover processes of this run's daemon:" $left; kill $left 2>/dev/null || true; }
   lsof -nP -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1 && echo "warning: port $PORT still in use" >&2
   rm -rf "$PASEO_HOME"
   [[ "$(readlink "$ROOT/current" 2>/dev/null)" == "$RUN" ]] && rm "$ROOT/current"
@@ -153,5 +157,5 @@ case "${1:-}" in
   shot) shift; cmd_shot "$@" ;;
   cleanup) cmd_cleanup ;;
   runs) ls -1 "$ROOT/runs" 2>/dev/null || true ;;
-  *) sed -n 2,3p "$0" | sed 's/^# //'; exit 2 ;;
+  *) echo "$USAGE"; exit 2 ;;
 esac

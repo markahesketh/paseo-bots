@@ -103,7 +103,7 @@ Proof standards:
 $V cleanup
 ```
 
-This closes the run's browser session and stops the run's daemon (`paseo daemon stop` on its home). It then kills any process whose command line still contains the run's home, deletes `home/`, and keeps `evidence/`, `run.env` and `launch.log`. It never touches `~/.paseo`, and it never kills by process name. Run it after every attempt, including failed ones. Evidence survives at `~/.cache/paseo-bots-verify/runs/<run-id>/evidence`. `$V runs` lists past runs. To delete old proof, remove its run directory yourself.
+This closes the run's browser session and stops the run's daemon (`paseo daemon stop` on its home). It records the daemon's descendant processes first (worker, plugin subprocess, agents) and kills any that outlive the stop. It then deletes `home/`, and keeps `evidence/`, `run.env` and `launch.log`. It never touches `~/.paseo`, and it never kills by process name. Run it after every attempt, including failed ones. Evidence survives at `~/.cache/paseo-bots-verify/runs/<run-id>/evidence`. `$V runs` lists past runs. To delete old proof, remove its run directory yourself.
 
 ## Features
 
