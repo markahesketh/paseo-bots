@@ -7,8 +7,8 @@ import type { MemoryJournal } from "./journal";
 import { appendDailyLog } from "./memory";
 import type { RoutineScheduler } from "./scheduler";
 
-export async function turnStarted(host: BotsHost, journal: MemoryJournal, asks: Pick<Asks, "turnStarted">, { agent }: PluginLifecycleEvents["agent.turn_started"]): Promise<void> {
-  await asks.turnStarted(agent.id).catch((error: unknown) => console.error("paseo-bots: couldn't send mail a pause held", error));
+export async function turnStarted(host: BotsHost, journal: MemoryJournal, asks: Pick<Asks, "turnStarted">, { agent, turnId }: PluginLifecycleEvents["agent.turn_started"]): Promise<void> {
+  await asks.turnStarted(agent.id, turnId).catch((error: unknown) => console.error("paseo-bots: couldn't send mail a pause held", error));
   const botId = await host.botIdOf(agent.id);
   if (botId) await journal.begin(botId);
 }

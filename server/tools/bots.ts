@@ -78,11 +78,13 @@ async function nameOf(host: BotsHost, labels: Record<string, string>): Promise<s
   return (await host.bot(labels[BOT_LABEL] ?? ""))?.name ?? "The other bot";
 }
 
+const PAUSED = "Bots in this chain have woken each other too many times in a row, so automatic replies are paused until your user sends a message or approves a request. Try later.";
+
 async function followUp(chatId: string, message: string, { bot, agentId, host, asks }: ToolCaller): Promise<string> {
   const chat = await readChat(host.requirePaseo(), chatId);
   const path = parseAskPath(chat.labels[ASK_PATH_LABEL]);
   if (!mayFollowUp(agentId, path)) throw new Error("You can only follow up in chats ask_bot started for you.");
-  if (await asks.paused(path[0]!)) throw new Error("Bots in this chain have woken each other too many times in a row, so automatic replies are paused until your user sends a message or approves a request. Try later.");
+  if (await asks.paused(path[0]!)) throw new Error(PAUSED);
   const who = await nameOf(host, chat.labels);
   if (chat.state === "running") throw new Error(`${who} is still working in chat ${chatId}; its reply will arrive here.`);
   if (chat.state === "permission") throw new Error(`${who} is waiting for the user to approve something in chat ${chatId}. Tell the user, and follow up later.`);
@@ -113,6 +115,7 @@ export const askBot = defineTool({
     if (!target) throw new Error(others.length ? `There's no other bot called "${wanted}". Ask one of: ${others.map((entry) => entry.name).join(", ")}.` : "There are no other bots to ask.");
     const path = await askPathOf(host, agentId);
     if (!mayTarget({ botId: bot.id, path }, target.id)) throw new Error(`${target.name} is already in this chain, so you can't ask it. Reply here instead; your reply goes back to it.`);
+    if (await asks.paused(path[0] ?? { botId: bot.id, chatId: agentId })) throw new Error(PAUSED);
     const busy = await host.requirePaseo().agents.list({ filter: { labels: { [BOT_LABEL]: target.id }, statuses: ["running", "initializing"] }, sort: [{ key: "updated_at", direction: "desc" }], page: { limit: OTHER_CHATS_MAX } }).catch(() => null);
     const otherChats = busy?.entries.map(({ agent }) => ({ id: agent.id, title: agent.title ?? "Untitled chat" })) ?? [];
     const newChat = newUuid();

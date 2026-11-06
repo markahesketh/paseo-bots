@@ -98,8 +98,13 @@ export class Asks {
     return (this.wakes.get(root.chatId) ?? 0) >= (await this.cap(root));
   }
 
-  async turnStarted(chatId: string): Promise<void> {
-    if (this.expected.delete(chatId)) return;
+  async turnStarted(chatId: string, turnId: string | null): Promise<void> {
+    if (this.expected.delete(chatId) || !this.wakes.has(chatId)) return;
+    // A turn Paseo starts with one of its agents' messages, such as a finished child's notice,
+    // opens with an agent_message item instead of a user_message, and isn't the user speaking.
+    // Paseo means to replace that item with its own timeline type after 2027-04-08.
+    const { entries } = await this.host.requirePaseo().agents.ref(chatId).timeline.refetch({ direction: "tail", projection: "projected", limit: 80 });
+    if (entries.some(({ turnId: turn, item }) => turn === turnId && item.type === "tool_call" && item.name === "agent_message")) return;
     await this.reset(chatId);
   }
 

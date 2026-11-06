@@ -113,7 +113,7 @@ export function TeamSheet({
         </SettingsSection>
         <SettingsSection title="Automatic replies" info="Bots a member asks wake each other with their replies. After this many in a row they pause until you send a message or approve a request in the chain.">
           <SettingsCard>
-            <InputField colors={colors} label="Replies in a row" hint="1 to 100" error={wakeCapOk ? null : "A whole number from 1 to 100"} initialValue={String(wakeCap)} keyboardType="number-pad" onChangeText={(text) => setWakeCap(Number(text.trim()))} />
+            <InputField colors={colors} label="Replies in a row" hint="1 to 1000" error={wakeCapOk ? null : "A whole number from 1 to 1000"} initialValue={String(wakeCap)} keyboardType="number-pad" onChangeText={(text) => setWakeCap(Number(text.trim()))} />
           </SettingsCard>
         </SettingsSection>
         <SheetActions leading={onDelete ? <Button colors={colors} variant="ghost" label="Delete team" icon="Trash2" onPress={onDelete} /> : null}>
